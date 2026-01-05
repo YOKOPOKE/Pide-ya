@@ -407,66 +407,12 @@ async function fetchMenuData() {
         });
 
         // Render Upsell Section
-        renderUpsellSection();
+
         renderExtrasStep(); // Populate Wizard Step 5
     }
 }
 
-function renderUpsellSection() {
-    // Find a good place to inject this. Ideally after the builder, before checkout/footer.
-    // We will inject it into a new container or append to 'arma-tu-bowl'
 
-    let container = document.getElementById('upsell-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'upsell-container';
-        container.className = 'max-w-7xl mx-auto px-4 py-8 mb-24'; // mb-24 for footer space
-        document.getElementById('arma-tu-bowl').appendChild(container);
-    }
-
-    // Combine Sides/Drinks/Desserts
-    const allExtras = [
-        { title: 'Share & Smile (Entradas)', items: extrasMenu.sides, icon: '🥢' },
-        { title: 'Drinks', items: extrasMenu.drinks, icon: '🥤' },
-        { title: 'Postres', items: extrasMenu.desserts, icon: '🍰' }
-    ];
-
-    let html = '';
-
-    allExtras.forEach(section => {
-        if (section.items.length > 0) {
-            html += `
-            <div class="mb-8">
-                <h3 class="text-xl font-serif font-bold text-yoko-dark mb-4 flex items-center gap-2">
-                    <span class="bg-yoko-accent text-white w-8 h-8 rounded-full flex items-center justify-center text-sm">${section.icon}</span>
-                    ${section.title}
-                </h3>
-                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    ${section.items.map(item => `
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 transition-all hover:shadow-md cursor-pointer group"
-                         onclick="toggleExtra('${item.name}', ${item.price}, '${item.category}')">
-                        <div class="flex justify-between items-start mb-2">
-                            <span class="font-bold text-yoko-dark group-hover:text-yoko-accent transition-colors">${item.name}</span>
-                            <span class="text-sm font-bold text-yoko-primary">$${item.price}</span>
-                        </div>
-                         <p class="text-xs text-gray-400 line-clamp-2 mb-3 h-8">${item.description || ''}</p>
-                         <button class="w-full py-1.5 rounded-lg text-xs font-bold transition-colors 
-                                        ${isExtraSelected(item.name) ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-600 group-hover:bg-yoko-light'} "
-                                        id="btn-extra-${item.name.replace(/\s+/g, '')}">
-                            ${isExtraSelected(item.name) ? 'Quitar' : 'Agregar'}
-                         </button>
-                    </div>
-                    `).join('')}
-                </div>
-            </div>`;
-        }
-    });
-
-    container.innerHTML = `<div class="bg-white/50 backdrop-blur-sm rounded-3xl p-6 border border-white/60 shadow-xl">
-        <h2 class="text-2xl font-bold text-center mb-6 text-yoko-primary">✨ Completa tu experiencia ✨</h2>
-        ${html}
-    </div>`;
-}
 
 
 
@@ -791,23 +737,29 @@ function renderExtrasStep() {
                 
                 <div class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3">
                     ${sec.items.map(item => `
-                        <div class="group bg-white p-3 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300 relative overflow-hidden cursor-pointer"
+                        <div class="group bg-white p-4 rounded-3xl shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden cursor-pointer h-full flex flex-col justify-between
+                                    ${isExtraSelected(item.name) ? 'ring-2 ring-yoko-accent bg-green-50/50' : 'hover:border-yoko-primary/30'}"
                              onclick="toggleExtra('${item.name}', ${item.price}, '${item.category}')">
                             
-                            <!-- Selection Ring -->
-                            <div class="absolute inset-0 border-2 rounded-2xl transition-colors duration-300 pointer-events-none
-                                      ${isExtraSelected(item.name) ? 'border-yoko-accent bg-yoko-accent/5' : 'border-transparent group-hover:border-gray-200'}"></div>
+                            <!-- Selection Checkmark (Absolute Top Right) -->
+                            <div class="absolute top-3 right-3 w-6 h-6 rounded-full flex items-center justify-center text-[10px] text-white transition-all duration-300 z-20
+                                      ${isExtraSelected(item.name) ? 'bg-yoko-accent scale-100 shadow-md' : 'bg-gray-200 scale-0 opacity-0'}">
+                                <i class="fa-solid fa-check"></i>
+                            </div>
 
-                            <div class="relative z-10 flex flex-col h-full justify-between">
-                                <div class="flex justify-between items-start mb-1">
-                                    <h4 class="font-bold text-sm text-yoko-dark leading-tight">${item.name}</h4>
-                                    <span class="text-xs font-bold text-yoko-primary">$${item.price}</span>
+                            <div class="relative z-10">
+                                <div class="flex justify-between items-start mb-2 pr-6">
+                                    <h4 class="font-bold text-sm lg:text-base text-yoko-dark leading-tight group-hover:text-yoko-primary transition-colors">${item.name}</h4>
                                 </div>
-                                <p class="text-[10px] text-gray-400 line-clamp-2 h-6 mb-2 leading-tight">${item.description || ''}</p>
+                                <p class="text-xs text-gray-400 line-clamp-2 mb-3 leading-relaxed font-medium">${item.description || 'Delicioso complemento para tu bowl.'}</p>
+                            </div>
+
+                            <div class="mt-auto flex items-center justify-between border-t border-gray-100 pt-3 group-hover:border-dashed transition-colors">
+                                <span class="text-sm font-bold text-yoko-dark group-hover:text-yoko-accent transition-colors">$${item.price}</span>
                                 
-                                <button class="w-full py-1.5 rounded-lg text-[10px] font-bold transition-all shadow-sm flex items-center justify-center gap-1
-                                            ${isExtraSelected(item.name) ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-gray-100 text-gray-500 group-hover:bg-yoko-primary group-hover:text-white'}">
-                                    ${isExtraSelected(item.name) ? '<i class="fa-solid fa-trash"></i> Quitar' : '<i class="fa-solid fa-plus"></i> Agregar'}
+                                <button class="px-3 py-1.5 rounded-full text-[10px] font-bold transition-all shadow-sm flex items-center gap-1.5
+                                            ${isExtraSelected(item.name) ? 'bg-red-100 text-red-500 hover:bg-red-200' : 'bg-gray-100 text-gray-600 group-hover:bg-yoko-primary group-hover:text-white'}">
+                                    ${isExtraSelected(item.name) ? '<i class="fa-solid fa-trash"></i>' : '<i class="fa-solid fa-plus"></i> Agregar'}
                                 </button>
                             </div>
                         </div>

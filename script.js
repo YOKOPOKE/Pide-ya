@@ -22,8 +22,12 @@ let currentOrder = {
     crunches: [], // Dry Toppings
     sauces: [],
     toppings: [], // Legacy compat if needed, but we use mixins/crunches
+    toppings: [], // Legacy compat if needed, but we use mixins/crunches
     extras: [] // Sides, Drinks, etc.
 };
+
+let activeExtraCategory = 'sides'; // Default tab
+
 // --- 3D TILT INIT ---
 function initTilt() {
     if (typeof VanillaTilt !== 'undefined') {
@@ -707,65 +711,94 @@ function updateOrder(type, value, price = 0, event) { // Added event param if po
 let currentStep = 0;
 const totalSteps = 6;
 
+
 // --- RENDER EXTRAS STEP (Wizard Step 5) ---
+window.setExtraCategory = function (category) {
+    activeExtraCategory = category;
+    renderExtrasStep();
+};
+
 function renderExtrasStep() {
     const container = document.getElementById('extras-step-container');
     if (!container) return;
 
-    // Combine for display
-    const extras = [
-        { title: 'Entradas & Compartir', items: extrasMenu.sides, icon: '🥢', color: 'bg-orange-50 text-orange-600' },
-        { title: 'Bebidas Refresh', items: extrasMenu.drinks, icon: '🥤', color: 'bg-blue-50 text-blue-600' },
-        { title: 'Postres', items: extrasMenu.desserts, icon: '🍰', color: 'bg-pink-50 text-pink-600' }
+    // Define Sections
+    const sections = [
+        { id: 'sides', title: 'Entradas', icon: '🥢' },
+        { id: 'drinks', title: 'Bebidas', icon: '�' },
+        { id: 'desserts', title: 'Postres', icon: '🍰' }
     ];
 
-    let html = '';
-    extras.forEach(sec => {
-        if (sec.items.length) {
-            html += `
-            <div class="mb-4 last:mb-0">
-                <div class="flex items-center gap-2 mb-3">
-                    <span class="w-6 h-6 rounded-full ${sec.color} flex items-center justify-center text-xs shadow-sm">${sec.icon}</span>
-                    <h3 class="text-sm font-bold text-gray-500 uppercase tracking-wider">${sec.title}</h3>
-                </div>
-                
-                <div class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    ${sec.items.map(item => `
-                        <div class="group relative overflow-hidden rounded-2xl transition-all duration-300 cursor-pointer h-full
-                                    ${isExtraSelected(item.name)
-                    ? 'bg-white shadow-lg ring-2 ring-yoko-accent transform scale-105'
-                    : 'bg-white/60 backdrop-blur-md border border-white/50 hover:bg-white hover:shadow-xl hover:scale-105'}"
-                             onclick="toggleExtra('${item.name}', ${item.price}, '${item.category}')">
-                            
-                            <!-- Status Indicator -->
-                            <div class="absolute top-3 right-3 z-20 transition-all duration-300 ${isExtraSelected(item.name) ? 'opacity-100 scale-100' : 'opacity-0 scale-50'}">
-                                <div class="w-6 h-6 rounded-full bg-yoko-accent text-white flex items-center justify-center text-xs shadow-md">
-                                    <i class="fa-solid fa-check"></i>
-                                </div>
-                            </div>
+    // Get items for current selection
+    let currentItems = [];
+    if (activeExtraCategory === 'sides') currentItems = extrasMenu.sides;
+    if (activeExtraCategory === 'drinks') currentItems = extrasMenu.drinks;
+    if (activeExtraCategory === 'desserts') currentItems = extrasMenu.desserts;
 
-                            <div class="p-4 flex flex-col h-full relative z-10">
-                                <!-- Icon & Name -->
-                                <div class="flex items-start gap-3 mb-2">
-                                    <span class="text-2xl opacity-80 grayscale group-hover:grayscale-0 transition-all duration-300 scale-90 group-hover:scale-110">${item.icon || sec.icon}</span>
-                                    <div>
-                                        <h4 class="font-bold text-sm text-yoko-dark leading-tight group-hover:text-yoko-primary transition-colors">${item.name}</h4>
-                                        <span class="text-xs font-bold text-yoko-accent block mt-0.5">$${item.price}</span>
-                                    </div>
+    let html = `
+        <!-- Category Tabs -->
+        <div class="flex gap-3 overflow-x-auto pb-4 mb-2 no-scrollbar" style="-webkit-overflow-scrolling: touch;">
+            ${sections.map(sec => `
+                <button onclick="setExtraCategory('${sec.id}')"
+                    class="px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all duration-300 shadow-sm
+                    ${activeExtraCategory === sec.id
+            ? 'bg-yoko-accent text-white shadow-yoko-accent/30 shadow-lg scale-105'
+            : 'bg-white text-gray-500 hover:bg-gray-50 hover:text-yoko-dark border border-gray-100'}">
+                    ${sec.title}
+                </button>
+            `).join('')}
+        </div>
+
+        <!-- Animation Wrapper -->
+        <div>
+            <h3 class="text-lg font-bold text-yoko-dark mb-4 flex items-center gap-2 animate-fade-in-up">
+                <span class="bg-indigo-50 text-indigo-500 w-8 h-8 rounded-xl flex items-center justify-center text-sm shadow-sm">
+                    ${sections.find(s => s.id === activeExtraCategory).icon}
+                </span>
+                ${sections.find(s => s.id === activeExtraCategory).title}
+            </h3>
+            
+            <div class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                ${currentItems.length ? currentItems.map((item, index) => `
+                    <div class="group relative overflow-hidden rounded-2xl transition-all duration-300 cursor-pointer h-full min-h-[140px] animate-fade-in-up
+                                ${isExtraSelected(item.name)
+                    ? 'bg-white shadow-lg ring-2 ring-yoko-accent transform scale-[1.02]'
+                    : 'bg-white/60 backdrop-blur-md border border-white/50 hover:bg-white hover:shadow-xl hover:scale-[1.02]'}"
+                            style="animation-delay: ${index * 0.05}s; animation-fill-mode: both;"
+                            onclick="toggleExtra('${item.name}', ${item.price}, '${item.category}')">
+                        
+                        <!-- Status Indicator -->
+                        <div class="absolute top-3 right-3 z-20 transition-all duration-300 ${isExtraSelected(item.name) ? 'opacity-100 scale-100' : 'opacity-0 scale-50'}">
+                            <div class="w-6 h-6 rounded-full bg-yoko-accent text-white flex items-center justify-center text-xs shadow-md">
+                                <i class="fa-solid fa-check"></i>
+                            </div>
+                        </div>
+
+                        <div class="p-4 flex flex-col h-full relative z-10">
+                            <!-- Icon & Name -->
+                            <div class="flex items-start gap-3 mb-2">
+                                <span class="text-3xl opacity-90 drop-shadow-sm filter group-hover:brightness-110 transition-all duration-300">${item.icon || sections.find(s => s.id === activeExtraCategory).icon}</span>
+                                <div>
+                                    <h4 class="font-bold text-sm lg:text-base text-yoko-dark leading-tight group-hover:text-yoko-primary transition-colors line-clamp-2">${item.name}</h4>
+                                    <span class="text-xs font-bold text-yoko-accent block mt-1 bg-yoko-accent/5 px-2 py-0.5 rounded-md inline-block">$${item.price}</span>
                                 </div>
-                                
-                                <!-- Description (Smaller) -->
-                                <p class="text-[10px] text-gray-400 line-clamp-2 leading-relaxed mt-1">${item.description || ''}</p>
                             </div>
                             
-                            <!-- Subtle Background Flash -->
-                            <div class="absolute inset-0 bg-gradient-to-br from-green-50/0 to-green-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+                            <!-- Description -->
+                            <p class="text-[11px] text-gray-400 line-clamp-2 leading-relaxed mt-auto">${item.description || ''}</p>
                         </div>
-                    `).join('')}
-                </div>
-            </div>`;
-        }
-    });
+                        
+                        <!-- Subtle Background Flash -->
+                        <div class="absolute inset-0 bg-gradient-to-br from-indigo-50/0 to-indigo-50/30 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+                    </div>
+                `).join('') : `
+                    <div class="col-span-full py-8 text-center text-gray-400 italic">
+                        No hay opciones disponibles en esta categoría.
+                    </div>
+                `}
+            </div>
+        </div>
+    `;
 
     container.innerHTML = html;
 }

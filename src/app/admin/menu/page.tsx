@@ -260,9 +260,10 @@ export default function AdminMenuPage() {
                             // @ts-ignore
                             if (!acc[cat]) acc[cat] = [];
                             // @ts-ignore
+                            // @ts-ignore
                             acc[cat].push(item);
                             return acc;
-                        }, {})).map(([category, items]: [string, any[]]) => (
+                        }, {} as Record<string, any[]>)).map(([category, items]) => (
                             <div key={category}>
                                 <div className="flex items-center gap-4 mb-6">
                                     <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tight">{category}</h3>

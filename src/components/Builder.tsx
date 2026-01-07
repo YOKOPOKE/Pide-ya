@@ -355,10 +355,6 @@ export default function Builder({ initialProductSlug = 'poke-mediano', onBack }:
                                     <AlertCircle size={16} className="text-violet-500" />
                                     Elige {currentStep.max_selections ? `hasta ${currentStep.max_selections}` : 'tus favoritos'}
                                 </div>
-                                {/* DEBUG: Remove after fixing */}
-                                <div className="text-xs text-red-500 mt-2 font-mono">
-                                    Debug: Opts {currentStep.options.length} | ID {currentStep.id}
-                                </div>
                             </div>
 
                             <motion.div
@@ -396,9 +392,6 @@ export default function Builder({ initialProductSlug = 'poke-mediano', onBack }:
                                         }
                                     } else {
                                         // If already selected, show what it IS costing? 
-                                        // Or usually show nothing or the static price?
-                                        // For a clean UI, we just show "+$Price" if it IS costing money.
-                                        // We need to know its index in selection.
                                         const myIndex = currentSels.findIndex(s => s.id === opt.id);
                                         const isFree = myIndex !== -1 && myIndex < includedCount;
 
@@ -438,13 +431,10 @@ export default function Builder({ initialProductSlug = 'poke-mediano', onBack }:
                                             <div className="relative z-10 w-full">
                                                 <div className="font-bold text-base leading-tight">{opt.name}</div>
                                             </div>
-
-                                            {/* Optional Image Background or Overlay could go here */}
                                         </motion.div>
                                     );
                                 })}
                             </motion.div>
-
                         </motion.div>
                     </AnimatePresence>
                 </div>
@@ -455,16 +445,16 @@ export default function Builder({ initialProductSlug = 'poke-mediano', onBack }:
                         onClick={handlePrev}
                         disabled={currentStepIndex === 0}
                         className={`
-w - 12 h - 12 md: w - 14 md: h - 14 rounded - full flex items - center justify - center font - bold transition - all
+                            w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center font-bold transition-all
                             ${currentStepIndex === 0 ? 'bg-slate-100 text-slate-300' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}
-`}
+                        `}
                     >
                         <ChevronLeft size={24} />
                     </button>
 
                     <div className="flex gap-1 md:gap-2">
                         {product.steps.map((_, idx) => (
-                            <div key={idx} className={`h - 2 rounded - full transition - all ${idx === currentStepIndex ? 'bg-violet-600 w-6' : 'bg-slate-200 w-2'} `} />
+                            <div key={idx} className={`h-2 rounded-full transition-all ${idx === currentStepIndex ? 'bg-violet-600 w-6' : 'bg-slate-200 w-2'}`} />
                         ))}
                     </div>
 
@@ -473,12 +463,12 @@ w - 12 h - 12 md: w - 14 md: h - 14 rounded - full flex items - center justify -
                             onClick={handleNext}
                             disabled={!canProceed(currentStep)}
                             className={`
-h - 12 md: h - 14 px - 6 md: px - 8 rounded - full font - bold flex items - center gap - 2 transition - all
+                                h-12 md:h-14 px-6 md:px-8 rounded-full font-bold flex items-center gap-2 transition-all
                                 ${canProceed(currentStep)
                                     ? 'bg-slate-900 text-white hover:bg-black shadow-lg shadow-slate-900/20'
                                     : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                                 }
-`}
+                            `}
                         >
                             <span>Siguiente</span>
                             <ChevronRight size={20} />
@@ -488,12 +478,12 @@ h - 12 md: h - 14 px - 6 md: px - 8 rounded - full font - bold flex items - cent
                             onClick={handleAddToCart}
                             disabled={!canProceed(currentStep)}
                             className={`
-h - 12 md: h - 14 px - 6 md: px - 8 rounded - full font - bold flex items - center gap - 2 transition - all
+                                h-12 md:h-14 px-6 md:px-8 rounded-full font-bold flex items-center gap-2 transition-all
                                 ${canProceed(currentStep)
                                     ? 'bg-violet-600 text-white hover:bg-violet-700 shadow-lg shadow-violet-600/30'
                                     : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                                 }
-`}
+                            `}
                         >
                             <ShoppingBag size={20} />
                             <span className="hidden sm:inline">Agregar al Pedido</span>
@@ -538,7 +528,7 @@ h - 12 md: h - 14 px - 6 md: px - 8 rounded - full font - bold flex items - cent
                 )}
             </AnimatePresence>
 
-        </div >
+        </div>
     );
 }
 
@@ -559,10 +549,10 @@ function SummaryContent({ product, selections, currentStepIndex, total }: { prod
                     if (stepSels.length === 0 && !isActive && idx > currentStepIndex) return null;
 
                     return (
-                        <div key={step.id} className={`relative pl - 8 border - l - 2 ${isActive ? 'border-violet-500' : 'border-slate-200'} pb - 2 last: border - 0 last: pb - 0`}>
-                            <div className={`absolute - left - [9px] top - 0 w - 4 h - 4 rounded - full border - 2 bg - white transition - colors ${isActive ? 'border-violet-500 scale-125' : 'border-slate-300'} `} />
+                        <div key={step.id} className={`relative pl-8 border-l-2 ${isActive ? 'border-violet-500' : 'border-slate-200'} pb-2 last:border-0 last:pb-0`}>
+                            <div className={`absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 bg-white transition-colors ${isActive ? 'border-violet-500 scale-125' : 'border-slate-300'}`} />
 
-                            <h4 className={`text - xs font - bold uppercase tracking - widest mb - 3 ${isActive ? 'text-violet-600' : 'text-slate-400'} `}>
+                            <h4 className={`text-xs font-bold uppercase tracking-widest mb-3 ${isActive ? 'text-violet-600' : 'text-slate-400'}`}>
                                 {step.label}
                             </h4>
 

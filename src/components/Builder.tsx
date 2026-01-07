@@ -56,6 +56,7 @@ export default function Builder({ initialProductType = 'bowl', onBack }: { initi
     // Config State
     const [rules, setRules] = useState<SizeRule[]>([]);
     const [loadingRules, setLoadingRules] = useState(true);
+    const [fetchError, setFetchError] = useState<string | null>(null);
 
     // Current selection
     const [currentStep, setCurrentStep] = useState(0);
@@ -79,11 +80,20 @@ export default function Builder({ initialProductType = 'bowl', onBack }: { initi
     // Initial Data Fetch
     useEffect(() => {
         const fetchData = async () => {
-            // 1. Fetch Rules
-            const { data: rulesData } = await supabase.from('sizes').select('*').order('id');
-            if (rulesData) {
+            try {
+                setLoadingRules(true);
+                setLoadingIngredients(true);
+                setFetchError(null);
+
+                // 1. Fetch Rules
+                const { data: rulesData, error: rulesError } = await supabase.from('sizes').select('*').order('id');
+
+                if (rulesError) throw rulesError;
+                if (!rulesData || rulesData.length === 0) throw new Error('No se encontraron reglas de configuración');
+
                 setRules(rulesData as SizeRule[]);
-                // Set initial price based on default size (assuming Mediano is common)
+
+                // Set initial price safely
                 const defaultRule = rulesData.find(r => r.name === 'Mediano') || rulesData[0];
                 if (defaultRule && initialProductType === 'bowl') {
                     setOrder(prev => ({
@@ -93,31 +103,39 @@ export default function Builder({ initialProductType = 'bowl', onBack }: { initi
                         size: defaultRule.name === 'Chico' ? 'small' : defaultRule.name === 'Grande' ? 'large' : 'medium'
                     }));
                 }
-            }
-            setLoadingRules(false);
+                setLoadingRules(false);
 
-            // 2. Fetch Ingredients
-            const { data: ingredientsData } = await supabase.from('ingredients').select('*').eq('is_available', true);
-            if (ingredientsData) {
-                // Group by type with heuristic mapping
-                const grouped = ingredientsData.reduce((acc, item) => {
-                    let cat = item.type || item.category || 'others';
-                    cat = cat.toLowerCase();
-                    // Normalize categories
-                    if (cat === 'act' || cat === 'extra') cat = 'extras';
-                    if (cat === 'topping') cat = 'mixins'; // Veggies often labeled topping in DB
-                    if (cat === 'crunch') cat = 'toppings'; // Dry toppings often labeled crunch
-                    if (cat === 'protein') cat = 'proteins';
-                    if (cat === 'base') cat = 'base';
-                    if (cat === 'sauce') cat = 'sauces';
+                // 2. Fetch Ingredients
+                const { data: ingredientsData, error: ingredientsError } = await supabase.from('ingredients').select('*').eq('is_available', true);
 
-                    if (!acc[cat]) acc[cat] = [];
-                    acc[cat].push({ ...item, price: item.premium_price });
-                    return acc;
-                }, {} as Record<string, Ingredient[]>);
-                setMenu(grouped);
+                if (ingredientsError) throw ingredientsError;
+
+                if (ingredientsData) {
+                    const grouped = ingredientsData.reduce((acc, item) => {
+                        let cat = item.type || item.category || 'others';
+                        cat = cat.toLowerCase();
+                        // Normalize categories (keep sync with logic)
+                        if (cat === 'act' || cat === 'extra') cat = 'extras';
+                        if (cat === 'topping') cat = 'mixins';
+                        if (cat === 'crunch') cat = 'toppings';
+                        if (cat === 'protein') cat = 'proteins';
+                        if (cat === 'base') cat = 'base';
+                        if (cat === 'sauce') cat = 'sauces';
+
+                        if (!acc[cat]) acc[cat] = [];
+                        acc[cat].push({ ...item, price: item.premium_price });
+                        return acc;
+                    }, {} as Record<string, Ingredient[]>);
+                    setMenu(grouped);
+                }
+                setLoadingIngredients(false);
+
+            } catch (err: any) {
+                console.error('Builder Data Error:', err);
+                setFetchError(err.message || 'Error al conectar con el servidor.');
+                setLoadingRules(false);
+                setLoadingIngredients(false);
             }
-            setLoadingIngredients(false);
         };
 
         fetchData();
@@ -132,7 +150,7 @@ export default function Builder({ initialProductType = 'bowl', onBack }: { initi
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
-    }, []);
+    }, [initialProductType]);
 
     // Recalculate Price whenever Order or Rules change
     useEffect(() => {
@@ -331,7 +349,25 @@ export default function Builder({ initialProductType = 'bowl', onBack }: { initi
         if (builderTitle) builderTitle.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, [currentStep]);
 
-    if (loadingRules || loadingIngredients) return <div className="py-20 text-center animate-pulse text-yoko-primary font-bold">Cargando Builder...</div>;
+    const retryFetch = () => window.location.reload();
+
+    if (fetchError) {
+        return (
+            <div className="flex flex-col items-center justify-center h-[50vh] text-center p-4">
+                <div className="text-red-500 mb-4 text-6xl">⚠️</div>
+                <h3 className="text-2xl font-bold text-yoko-dark mb-2">Algo salió mal</h3>
+                <p className="text-gray-500 mb-6">{fetchError}</p>
+                <button
+                    onClick={retryFetch}
+                    className="bg-yoko-primary text-white px-8 py-3 rounded-full font-bold shadow-lg hover:shadow-xl hover:scale-105 transition-all"
+                >
+                    Reintentar
+                </button>
+            </div>
+        );
+    }
+
+    if (loadingRules || loadingIngredients) return <div className="py-20 text-center animate-pulse text-yoko-primary font-bold">Cargando ingredientes frescos...</div>;
 
     const containerVariants = {
         hidden: { opacity: 0 },

@@ -55,11 +55,30 @@ export default function OrderFlow() {
 
     return (
         <div className="min-h-screen bg-white">
-            {!showBuilder ? (
-                <ProductSelector onSelect={handleProductSelect} />
-            ) : (
-                <Builder initialProductType={builderMode} onBack={handleBack} />
-            )}
+            <AnimatePresence mode="wait">
+                {!showBuilder ? (
+                    <motion.div
+                        key="selector"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ duration: 0.3, ease: "easeInOut" }}
+                    >
+                        <ProductSelector onSelect={handleProductSelect} />
+                    </motion.div>
+                ) : (
+                    <motion.div
+                        key="builder"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ duration: 0.3, ease: "easeInOut" }}
+                        className="w-full"
+                    >
+                        <Builder initialProductType={builderMode} onBack={handleBack} />
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

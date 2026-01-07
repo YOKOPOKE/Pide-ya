@@ -39,6 +39,15 @@ export default function Navbar() {
         return () => window.removeEventListener("scroll", handleScroll);
     }, []);
 
+    const openBuilder = () => {
+        const orderFlow = document.getElementById('order-flow'); // We might need to add this ID to OrderFlow wrapper
+        // Dispatch event
+        window.dispatchEvent(new CustomEvent('open-builder', { detail: { mode: 'bowl' } }));
+
+        // Optional: Scroll to builder area if needed, but usually it takes focus
+        // For now just dispatch
+    };
+
     return (
         <>
             <nav
@@ -127,6 +136,7 @@ export default function Navbar() {
                                 )}
                             </button>
                             <button
+                                onClick={openBuilder}
                                 className="bg-yoko-dark text-white px-8 py-3 rounded-full font-bold hover:bg-yoko-accent transition shadow-lg hover:shadow-xl transform hover:-translate-y-1 flex items-center gap-2 text-sm uppercase tracking-wider"
                             >
                                 <Edit3 className="w-4 h-4" /> Armar Bowl
@@ -181,7 +191,7 @@ export default function Navbar() {
                         ))}
                         <button
                             className="bg-yoko-accent text-white px-8 py-4 rounded-full font-bold shadow-xl flex items-center gap-2 text-lg uppercase tracking-wider"
-                            onClick={() => setIsMobileMenuOpen(false)}
+                            onClick={() => { setIsMobileMenuOpen(false); openBuilder(); }}
                         >
                             <Edit3 className="w-5 h-5" /> Armar Bowl
                         </button>

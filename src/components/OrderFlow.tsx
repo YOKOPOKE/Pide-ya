@@ -51,34 +51,29 @@ export default function OrderFlow() {
         }
     }, [showBuilder, builderMode]);
 
+    // Scroll to section when opening builder
+    useEffect(() => {
+        if (showBuilder) {
+            const element = document.getElementById('order-flow');
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+    }, [showBuilder]);
+
     console.log('OrderFlow Render:', { showBuilder, builderMode });
 
     return (
-        <div className="min-h-screen bg-white">
-            <AnimatePresence mode="wait">
-                {!showBuilder ? (
-                    <motion.div
-                        key="selector"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        transition={{ duration: 0.3, ease: "easeInOut" }}
-                    >
-                        <ProductSelector onSelect={handleProductSelect} />
-                    </motion.div>
-                ) : (
-                    <motion.div
-                        key="builder"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        transition={{ duration: 0.3, ease: "easeInOut" }}
-                        className="w-full"
-                    >
-                        <Builder initialProductType={builderMode} onBack={handleBack} />
-                    </motion.div>
-                )}
-            </AnimatePresence>
+        <div id="order-flow" className="min-h-screen bg-white transition-opacity duration-300 ease-in-out">
+            {!showBuilder ? (
+                <div className="animate-fade-in">
+                    <ProductSelector onSelect={handleProductSelect} />
+                </div>
+            ) : (
+                <div className="animate-fade-in w-full">
+                    <Builder initialProductType={builderMode} onBack={handleBack} />
+                </div>
+            )}
         </div>
     );
 }

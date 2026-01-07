@@ -414,7 +414,7 @@ export default function Builder({ initialProductType = 'bowl', onBack }: { initi
         );
     }
 
-    if (loadingRules || loadingIngredients) return <div className="py-20 text-center animate-pulse text-yoko-primary font-bold">Cargando ingredientes frescos...</div>;
+    if (loadingRules || loadingIngredients) return <div className="h-[60vh] flex items-center justify-center text-yoko-primary font-bold animate-pulse">Cargando ingredientes frescos...</div>;
 
     const containerVariants = {
         hidden: { opacity: 0 },

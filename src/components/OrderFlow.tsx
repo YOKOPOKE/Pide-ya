@@ -50,6 +50,8 @@ export default function OrderFlow() {
         }
     }, [showBuilder, builderMode]);
 
+    console.log('OrderFlow Render:', { showBuilder, builderMode });
+
     return (
         <div className="min-h-screen bg-white">
             <AnimatePresence mode="wait">
@@ -58,8 +60,8 @@ export default function OrderFlow() {
                         key="selector"
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20, transition: { duration: 0.15 } }}
-                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                        exit={{ opacity: 0, x: -20, transition: { duration: 0.2 } }}
+                        transition={{ duration: 0.3 }}
                     >
                         <ProductSelector onSelect={handleProductSelect} />
                     </motion.div>
@@ -68,8 +70,9 @@ export default function OrderFlow() {
                         key="builder"
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 20, transition: { duration: 0.15 } }}
-                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                        exit={{ opacity: 0, x: 20, transition: { duration: 0.2 } }}
+                        transition={{ duration: 0.3 }}
+                        onAnimationComplete={() => console.log('Builder Animation Complete')}
                     >
                         <Builder initialProductType={builderMode} onBack={handleBack} />
                     </motion.div>

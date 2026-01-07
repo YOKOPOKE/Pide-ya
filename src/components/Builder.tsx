@@ -53,6 +53,8 @@ export default function Builder({ initialProductType = 'bowl', onBack }: { initi
     const supabase = createClient();
     const { addToCart } = useCart();
 
+
+
     // Config State
     const [rules, setRules] = useState<SizeRule[]>([]);
     const [loadingRules, setLoadingRules] = useState(true);
@@ -63,6 +65,8 @@ export default function Builder({ initialProductType = 'bowl', onBack }: { initi
     const [direction, setDirection] = useState(0);
     const [menu, setMenu] = useState<Record<string, Ingredient[]>>({});
     const [loadingIngredients, setLoadingIngredients] = useState(true);
+
+    console.log('Builder Component Rendering...', { loadingRules, loadingIngredients, fetchError });
 
     const [order, setOrder] = useState<OrderState>({
         productType: initialProductType,
@@ -151,6 +155,22 @@ export default function Builder({ initialProductType = 'bowl', onBack }: { initi
 
         return () => { supabase.removeChannel(channel); };
     }, [initialProductType]);
+
+    // Safety Timeout
+    useEffect(() => {
+        let timeout: NodeJS.Timeout;
+        if (loadingRules || loadingIngredients) {
+            timeout = setTimeout(() => {
+                if (loadingRules || loadingIngredients) {
+                    console.error('Safety Timeout Triggered');
+                    setFetchError("La conexión con el servidor ha excedido el tiempo límite. Por favor revisa tu internet.");
+                    setLoadingRules(false);
+                    setLoadingIngredients(false);
+                }
+            }, 10000); // 10 seconds aggressive timeout
+        }
+        return () => clearTimeout(timeout);
+    }, [loadingRules, loadingIngredients]);
 
     // Recalculate Price whenever Order or Rules change
     useEffect(() => {

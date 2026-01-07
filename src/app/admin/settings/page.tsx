@@ -1,142 +1,263 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { createClient } from '@/lib/supabase';
-import { Plus, Trash2, Fish, Carrot, Utensils, Droplet, Cookie, Star, ArrowRight, ArrowLeft, Save, Edit3, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import {
+    Plus, Save, Trash2, Edit2, ChevronRight, ArrowLeft,
+    Layers, Package, CheckCircle2, XCircle, DollarSign, Image as ImageIcon,
+    ChefHat, Coffee, Upload
+} from 'lucide-react';
+import { createClient } from '@/lib/supabase';
+import { TiltCard } from '@/components/ui/TiltCard';
+import { ImageUpload } from '@/components/ui/ImageUpload';
 
-type SizeRule = {
+// --- Types ---
+type Product = {
     id: number;
     name: string;
-    description?: string; // Optional description
-    image_url?: string; // New field
+    slug: string;
     base_price: number;
-    included_proteins: number;
-    price_extra_protein: number;
-    included_toppings: number; // Mixins
-    price_extra_topping: number;
-    included_crunches: number; // Toppings
-    price_extra_crunch: number;
-    included_sauces: number;
-    price_extra_sauce: number;
-    included_bases: number;
-    price_extra_base: number;
-    included_extras: number;
-    price_extra_extra: number;
+    description?: string;
+    image_url?: string;
+    is_active: boolean;
+    type: 'poke' | 'burger' | 'other';
+    category?: string;
 };
 
-// Configuration Sections for Step 2
-const CONFIG_SECTIONS = [
-    { id: 'bases', title: 'Bases', icon: <Utensils size={20} />, includedKey: 'included_bases', extraKey: 'price_extra_base', color: 'bg-orange-100 text-orange-600' },
-    { id: 'proteins', title: 'Proteínas', icon: <Fish size={20} />, includedKey: 'included_proteins', extraKey: 'price_extra_protein', color: 'bg-blue-100 text-blue-600' },
-    { id: 'mixins', title: 'Mixins', icon: <Carrot size={20} />, includedKey: 'included_toppings', extraKey: 'price_extra_topping', color: 'bg-green-100 text-green-600' },
-    { id: 'sauces', title: 'Salsas', icon: <Droplet size={20} />, includedKey: 'included_sauces', extraKey: 'price_extra_sauce', color: 'bg-red-100 text-red-600' },
-    { id: 'crunches', title: 'Crunches', icon: <Cookie size={20} />, includedKey: 'included_crunches', extraKey: 'price_extra_crunch', color: 'bg-yellow-100 text-yellow-600' },
-    { id: 'extras', title: 'Extras', icon: <Star size={20} />, includedKey: 'included_extras', extraKey: 'price_extra_extra', color: 'bg-purple-100 text-purple-600' },
-] as const;
+type Step = {
+    id: number;
+    product_id: number;
+    name: string;
+    label: string;
+    order: number;
+    min_selections: number;
+    max_selections: number | null;
+    included_selections: number | null;
+    price_per_extra: number | null;
+};
+// ...
+
+// ... (Render in EDIT_STEP) ...
+
+
+type Option = {
+    id: number;
+    step_id: number;
+    name: string;
+    price_extra: number | null;
+    is_available: boolean;
+    image_url?: string;
+};
 
 export default function AdminSettingsPage() {
     const supabase = createClient();
-    const [rules, setRules] = useState<SizeRule[]>([]);
+
+    // --- State ---
+    const [view, setView] = useState<'LIST' | 'EDIT_PRODUCT' | 'EDIT_STEP'>('LIST');
+    const [listTab, setListTab] = useState<'BUILDERS' | 'MENU'>('BUILDERS');
+
+    const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
-    const [uploading, setUploading] = useState(false);
 
-    // Editor State
-    const [viewMode, setViewMode] = useState<'list' | 'editor'>('list');
-    const [editingRule, setEditingRule] = useState<Partial<SizeRule>>({});
-    const [currentStep, setCurrentStep] = useState(1); // 1: Info, 2: Rules
+    // Selection State
+    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+    const [productSteps, setProductSteps] = useState<Step[]>([]);
 
-    useEffect(() => {
-        fetchRules();
-    }, []);
+    const [selectedStep, setSelectedStep] = useState<Step | null>(null);
+    const [stepOptions, setStepOptions] = useState<Option[]>([]);
 
-    const fetchRules = async () => {
+    // --- Fetching ---
+    const fetchProducts = async () => {
         setLoading(true);
-        const { data } = await supabase.from('sizes').select('*').order('id');
-        if (data) setRules(data as SizeRule[]);
+        const { data } = await supabase.from('products').select('*').order('id');
+        if (data) setProducts(data);
         setLoading(false);
     };
 
-    const handleCreate = () => {
-        setEditingRule({
-            name: '',
-            base_price: 150,
-            included_bases: 1, price_extra_base: 0,
-            included_proteins: 2, price_extra_protein: 45,
-            included_toppings: 4, price_extra_topping: 15,
-            included_sauces: 2, price_extra_sauce: 10,
-            included_crunches: 2, price_extra_crunch: 10,
-            included_extras: 0, price_extra_extra: 25
-        });
-        setCurrentStep(1);
-        setViewMode('editor');
+    const fetchSteps = async (productId: number) => {
+        const { data } = await supabase.from('product_steps').select('*').eq('product_id', productId).order('order');
+        if (data) setProductSteps(data);
     };
 
-    const handleEdit = (rule: SizeRule) => {
-        setEditingRule({ ...rule });
-        setCurrentStep(1);
-        setViewMode('editor');
+    const fetchOptions = async (stepId: number) => {
+        const { data } = await supabase.from('step_options').select('*').eq('step_id', stepId).order('name');
+        if (data) setStepOptions(data);
     };
 
-    const handleSave = async () => {
-        if (!editingRule.name || !editingRule.base_price) return alert('Por favor completa la información básica.');
+    useEffect(() => {
+        fetchProducts();
+    }, []);
 
+    // --- Derived State (Filters) ---
+    const builderProducts = products.filter(p => p.type === 'poke' || p.type === 'burger');
+    const menuProducts = products.filter(p => p.type === 'other');
+    const displayedProducts = listTab === 'BUILDERS' ? builderProducts : menuProducts;
+
+    // --- Handlers: Product ---
+    const handleEditProduct = async (p: Product) => {
+        setSelectedProduct(p);
+        await fetchSteps(p.id);
+        setView('EDIT_PRODUCT');
+    };
+
+    const handleCreateProduct = async () => {
+        const isBuilderTab = listTab === 'BUILDERS';
+
+        const newProd = {
+            name: 'Nuevo Producto',
+            slug: `new-product-${Date.now()}`,
+            type: isBuilderTab ? 'poke' : 'other', // Default type based on tab
+            category: isBuilderTab ? 'bowls' : 'General',
+            base_price: 0,
+            is_active: false
+        };
         // @ts-ignore
-        if (editingRule.id) {
-            // @ts-ignore
-            await supabase.from('sizes').update(editingRule).eq('id', editingRule.id);
+        const { data } = await supabase.from('products').insert(newProd).select().single();
+        if (data) {
+            setProducts([...products, data]);
+            handleEditProduct(data);
+        }
+    };
+
+    const handleSaveProduct = async () => {
+        if (!selectedProduct) return;
+        await supabase.from('products').update({
+            name: selectedProduct.name,
+            base_price: selectedProduct.base_price,
+            image_url: selectedProduct.image_url,
+            is_active: selectedProduct.is_active,
+            category: selectedProduct.category,
+            description: selectedProduct.description
+        }).eq('id', selectedProduct.id);
+
+        showToast('¡Producto actualizado con éxito! 🍔✨');
+        fetchProducts();
+    };
+
+    const handleDeleteProduct = async () => {
+        if (!selectedProduct) return;
+        if (!confirm('¿Eliminar producto?')) return;
+
+        await supabase.from('products').delete().eq('id', selectedProduct.id);
+        setProducts(products.filter(p => p.id !== selectedProduct.id));
+        setView('LIST');
+    };
+
+    // --- Handlers: Steps ---
+    const handleEditStep = async (s: Step) => {
+        setSelectedStep(s);
+        await fetchOptions(s.id);
+        setView('EDIT_STEP');
+    };
+
+    // --- Notifications ---
+    const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+    const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+        setNotification({ message, type });
+        setTimeout(() => setNotification(null), 3000);
+    };
+
+
+
+    const handleCreateStep = async () => {
+        if (!selectedProduct) return;
+        const newStep = {
+            product_id: selectedProduct.id,
+            name: 'new-step',
+            label: 'Nueva Categoría',
+            order: productSteps.length + 1,
+            min_selections: 0,
+            max_selections: 1,
+            included_selections: 1,
+            price_per_extra: 0
+        };
+        // @ts-ignore
+        const { data } = await supabase.from('product_steps').insert(newStep).select().single();
+        if (data) {
+            setProductSteps([...productSteps, data]);
+            showToast('¡Nueva categoría lista! A configurarla 🎉');
+        }
+    };
+
+    const handleSaveStep = async () => {
+        if (!selectedStep) return;
+        const { error } = await supabase.from('product_steps').update({
+            label: selectedStep.label,
+            min_selections: selectedStep.min_selections,
+            max_selections: selectedStep.max_selections,
+            included_selections: selectedStep.included_selections ?? 1,
+            price_per_extra: selectedStep.price_per_extra ?? 0
+        }).eq('id', selectedStep.id);
+
+        if (error) {
+            showToast('Error al guardar: ' + error.message, 'error');
         } else {
-            await supabase.from('sizes').insert(editingRule);
-        }
-
-        await fetchRules();
-        setViewMode('list');
-    };
-
-    const handleDelete = async (id: number) => {
-        if (!confirm('¿Eliminar esta configuración?')) return;
-        await supabase.from('sizes').delete().eq('id', id);
-        fetchRules();
-    };
-
-    const updateField = (key: keyof SizeRule, value: any) => {
-        setEditingRule(prev => ({ ...prev, [key]: value }));
-    };
-
-    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files || e.target.files.length === 0) return;
-
-        const file = e.target.files[0];
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
-        const filePath = `bowls/${fileName}`;
-
-        setUploading(true);
-        try {
-            // Check/Create bucket logic could go here but assuming 'menu' exists for now
-            // Or use 'menu-items' if that was established. Let's try 'menu' as it's generic.
-            const { error: uploadError } = await supabase.storage
-                .from('menu')
-                .upload(filePath, file);
-
-            if (uploadError) throw uploadError;
-
-            const { data } = supabase.storage.from('menu').getPublicUrl(filePath);
-
-            updateField('image_url', data.publicUrl);
-        } catch (error: any) {
-            alert('Error subiendo imagen. Asegúrate que el bucket "menu" exista en Supabase. ' + error.message);
-        } finally {
-            setUploading(false);
+            showToast('¡Configuracion guardada con exito!🚀');
+            // Update local list to reflect changes
+            setProductSteps(prev => prev.map(s => s.id === selectedStep.id ? selectedStep : s));
         }
     };
 
-    if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-400">Cargando...</div>;
+    const handleDeleteStep = async () => {
+        if (!selectedStep) return;
+        if (!confirm('¿Estás seguro de eliminar esta categoría y todas sus opciones?')) return;
+
+        const { error } = await supabase.from('product_steps').delete().eq('id', selectedStep.id);
+        if (error) {
+            alert('Error al borrar');
+            return;
+        }
+
+        // Update local state
+        setProductSteps(prev => prev.filter(s => s.id !== selectedStep.id));
+        setView('EDIT_PRODUCT');
+    };
+
+    // --- Handlers: Options ---
+    const handleCreateOption = async () => {
+        if (!selectedStep) return;
+        const { data } = await supabase.from('step_options').insert({
+            step_id: selectedStep.id,
+            name: 'Nuevo Ingrediente',
+            price_extra: 0,
+            is_available: true
+        }).select().single();
+        if (data) {
+            setStepOptions([...stepOptions, data]);
+        }
+    };
+
+    const handleUpdateOption = async (id: number, updates: Partial<Option>) => {
+        // Optimistic update
+        setStepOptions(prev => prev.map(o => o.id === id ? { ...o, ...updates } : o));
+        await supabase.from('step_options').update(updates).eq('id', id);
+    };
+
+    const handleDeleteOption = async (id: number) => {
+        if (!confirm('¿Borrar ingrediente?')) return;
+        setStepOptions(prev => prev.filter(o => o.id !== id));
+        await supabase.from('step_options').delete().eq('id', id);
+    };
+
+
+    // --- Render ---
+
+    if (loading) return <div className="p-10 text-center text-slate-400 font-bold animate-pulse">Cargando Admin...</div>;
 
     return (
-        <div className="pb-20 min-h-screen bg-white">
+        <div className="min-h-screen bg-slate-50/50 p-4 md:p-10 pb-32">
+            <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+                <div>
+                    <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight mb-2">Arquitecto de Menú</h1>
+                    <p className="text-slate-500 font-medium text-sm md:text-base">Gestiona todo el menú: Pokes, Burgers y más.</p>
+                </div>
+            </header>
+
             <AnimatePresence mode="wait">
-                {viewMode === 'list' ? (
+
+                {/* VIEW: PRODUCT LIST */}
+                {view === 'LIST' && (
                     <motion.div
                         key="list"
                         initial={{ opacity: 0, x: -20 }}
@@ -144,264 +265,423 @@ export default function AdminSettingsPage() {
                         exit={{ opacity: 0, x: -20 }}
                         className="space-y-8"
                     >
-                        <div className="flex justify-between items-center border-b border-gray-100 pb-6">
-                            <div>
-                                <h1 className="text-3xl font-serif font-bold text-yoko-dark">Reglas de Bowls</h1>
-                                <p className="text-gray-500 mt-1">Gestiona los tamaños y costos disponibles.</p>
-                            </div>
+                        {/* TABS */}
+                        <div className="flex p-1 bg-white rounded-2xl w-full md:w-fit shadow-sm border border-slate-200 overflow-x-auto">
                             <button
-                                onClick={handleCreate}
-                                className="bg-yoko-dark text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-black transition-all shadow-lg active:scale-95"
+                                onClick={() => setListTab('BUILDERS')}
+                                className={`
+                                    flex-1 md:flex-none px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all whitespace-nowrap
+                                    ${listTab === 'BUILDERS' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:text-slate-900'}
+                                `}
                             >
-                                <Plus size={20} /> Nuevo Tamaño
+                                <ChefHat size={18} />
+                                Builders
+                            </button>
+                            <button
+                                onClick={() => setListTab('MENU')}
+                                className={`
+                                    flex-1 md:flex-none px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all whitespace-nowrap
+                                    ${listTab === 'MENU' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:text-slate-900'}
+                                `}
+                            >
+                                <Coffee size={18} />
+                                Carta
                             </button>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {rules.map(rule => (
+                        {/* LIST GRID */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                            {displayedProducts.map(p => (
+                                <div key={p.id} onClick={() => handleEditProduct(p)}>
+                                    <TiltCard className="group relative bg-white rounded-3xl p-6 shadow-sm border border-slate-100 hover:shadow-xl transition-all cursor-pointer h-full min-h-[220px] flex flex-col justify-between">
+                                        <div className="absolute top-4 right-4 text-slate-300 group-hover:text-violet-500 transition-colors">
+                                            <Edit2 size={20} />
+                                        </div>
+
+                                        <div>
+                                            <div className="flex justify-between items-start mb-4">
+                                                <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-3xl overflow-hidden shadow-sm border border-slate-100">
+                                                    {p.image_url ? (
+                                                        <img src={p.image_url} alt="" className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        p.type === 'burger' ? '🍔' : p.type === 'poke' ? '🥗' : '🍱'
+                                                    )}
+                                                </div>
+                                                <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded-lg uppercase tracking-wider">
+                                                    {p.category || 'General'}
+                                                </span>
+                                            </div>
+                                            <h3 className="text-xl font-bold text-slate-800 mb-1 leading-tight">{p.name}</h3>
+                                            <p className="text-sm text-slate-400 font-mono mb-4">${p.base_price}</p>
+                                        </div>
+
+                                        <div className={`self-start inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${p.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                            {p.is_active ? 'Activo' : 'Inactivo'}
+                                        </div>
+                                    </TiltCard>
+                                </div>
+                            ))}
+
+                            <button
+                                onClick={handleCreateProduct}
+                                className="flex flex-col items-center justify-center gap-4 bg-slate-100 rounded-3xl p-6 border-2 border-dashed border-slate-300 text-slate-400 hover:bg-slate-200 hover:border-slate-400 hover:text-slate-600 transition-all min-h-[200px]"
+                            >
+                                <Plus size={40} />
+                                <span className="font-bold">Crear {listTab === 'BUILDERS' ? 'Builder' : 'Producto'}</span>
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+
+                {/* VIEW: EDIT PRODUCT */}
+                {view === 'EDIT_PRODUCT' && selectedProduct && (
+                    <motion.div
+                        key="edit-product"
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 20 }}
+                        className="max-w-4xl mx-auto"
+                    >
+                        <button onClick={() => setView('LIST')} className="flex items-center gap-2 text-slate-400 hover:text-slate-600 font-bold mb-6 transition-colors">
+                            <ArrowLeft size={20} /> Volver a Lista
+                        </button>
+
+                        <div className="bg-white rounded-[2rem] p-6 md:p-8 shadow-xl border border-slate-100 mb-8">
+                            <div className="flex flex-col md:flex-row justify-between items-start mb-8 gap-4">
+                                <h2 className="text-2xl md:text-3xl font-black text-slate-800 flex items-center gap-3">
+                                    <Package className="text-violet-500" />
+                                    {selectedProduct.name}
+                                </h2>
+                                <div className="flex gap-2 self-end md:self-auto">
+                                    <button onClick={handleDeleteProduct} className="bg-red-50 text-red-500 px-4 py-2 rounded-xl font-bold hover:bg-red-100 transition-colors flex items-center gap-2">
+                                        <Trash2 size={18} />
+                                    </button>
+                                    <button onClick={handleSaveProduct} className="bg-violet-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-violet-700 transition-colors flex items-center gap-2">
+                                        <Save size={18} /> Guardar
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Nombre del Producto</label>
+                                        <input
+                                            value={selectedProduct.name}
+                                            onChange={e => setSelectedProduct({ ...selectedProduct, name: e.target.value })}
+                                            className="w-full text-lg font-bold bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-violet-500 outline-none"
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Precio Base ($)</label>
+                                            <input
+                                                type="number"
+                                                value={selectedProduct.base_price}
+                                                onChange={e => setSelectedProduct({ ...selectedProduct, base_price: Number(e.target.value) })}
+                                                className="w-full text-lg font-bold bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-violet-500 outline-none"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Categoría</label>
+                                            <input
+                                                value={selectedProduct.category || ''}
+                                                onChange={e => setSelectedProduct({ ...selectedProduct, category: e.target.value })}
+                                                className="w-full text-lg font-bold bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-violet-500 outline-none"
+                                                list="categories-list"
+                                            />
+                                            <datalist id="categories-list">
+                                                <option value="bowls" />
+                                                <option value="burgers" />
+                                                <option value="Pokes de la Casa" />
+                                                <option value="Share & Smile" />
+                                                <option value="Drinks" />
+                                                <option value="Postres" />
+                                            </datalist>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Descripción</label>
+                                        <textarea
+                                            value={selectedProduct.description || ''}
+                                            onChange={e => setSelectedProduct({ ...selectedProduct, description: e.target.value })}
+                                            className="w-full text-sm font-medium bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-violet-500 outline-none h-24 resize-none"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Imagen del Producto</label>
+                                        <ImageUpload
+                                            value={selectedProduct.image_url || ''}
+                                            onChange={(url) => setSelectedProduct({ ...selectedProduct, image_url: url })}
+                                            folder="products"
+                                        />
+                                    </div>
+                                    <div className="flex items-center justify-between bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                        <span className="font-bold text-slate-700">Estado Visible</span>
+                                        <button
+                                            onClick={() => setSelectedProduct({ ...selectedProduct, is_active: !selectedProduct.is_active })}
+                                            className={`w-14 h-8 rounded-full p-1 transition-colors ${selectedProduct.is_active ? 'bg-green-500' : 'bg-slate-300'}`}
+                                        >
+                                            <div className={`w-6 h-6 bg-white rounded-full shadow-md transition-transform ${selectedProduct.is_active ? 'translate-x-6' : 'translate-x-0'}`} />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* STEPS LIST */}
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-end px-2">
+                                <h3 className="text-xl font-black text-slate-800">Pasos de Configuración</h3>
+                                <button onClick={handleCreateStep} className="text-sm font-bold text-violet-600 hover:bg-violet-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+                                    <Plus size={16} /> Agregar Paso
+                                </button>
+                            </div>
+
+                            {productSteps.map((step, idx) => (
                                 <motion.div
-                                    layoutId={`card-${rule.id}`}
-                                    key={rule.id}
-                                    onClick={() => handleEdit(rule)}
-                                    className="group bg-white rounded-3xl p-6 border border-gray-100 shadow-sm hover:shadow-xl hover:border-yoko-primary/30 transition-all cursor-pointer relative overflow-hidden"
+                                    layout
+                                    key={step.id}
+                                    onClick={() => handleEditStep(step)}
+                                    className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 hover:border-violet-300 hover:shadow-md transition-all cursor-pointer flex items-center justify-between group"
                                 >
-                                    <div className="flex justify-between items-start mb-4">
-                                        <div className="w-12 h-12 rounded-2xl bg-gray-50 overflow-hidden flex items-center justify-center font-bold text-xl text-yoko-dark group-hover:bg-yoko-primary group-hover:text-white transition-colors relative">
-                                            {rule.image_url ? (
-                                                <img src={rule.image_url} alt={rule.name} className="w-full h-full object-cover" />
-                                            ) : (
-                                                <span>{rule.name.charAt(0)}</span>
-                                            )}
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 font-bold flex items-center justify-center text-sm">
+                                            {idx + 1}
                                         </div>
-                                        <div className="flex flex-col items-end">
-                                            <span className="text-2xl font-bold text-yoko-dark">${rule.base_price}</span>
-                                            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Precio Base</span>
+                                        <div>
+                                            <h4 className="font-bold text-slate-800 text-lg">{step.label}</h4>
+                                            <p className="text-xs text-slate-400 font-mono">
+                                                Min: {step.min_selections} | Max: {step.max_selections}
+                                            </p>
                                         </div>
                                     </div>
-
-                                    <h3 className="text-xl font-bold text-yoko-dark mb-4">{rule.name}</h3>
-
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between text-sm text-gray-500 py-1 border-b border-gray-50">
-                                            <span>Proteínas Incluidas</span>
-                                            <span className="font-bold text-yoko-dark">{rule.included_proteins}</span>
-                                        </div>
-                                        <div className="flex justify-between text-sm text-gray-500 py-1 border-b border-gray-50">
-                                            <span>Mixins Incluidos</span>
-                                            <span className="font-bold text-yoko-dark">{rule.included_toppings}</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="mt-6 flex items-center justify-between text-yoko-primary font-bold text-sm opacity-0 group-hover:opacity-100 transition-opacity translate-y-2 group-hover:translate-y-0">
-                                        <span>Editar Configuración</span>
-                                        <ArrowRight size={16} />
-                                    </div>
+                                    <ChevronRight className="text-slate-300 group-hover:text-violet-500 transition-colors" />
                                 </motion.div>
                             ))}
                         </div>
                     </motion.div>
-                ) : (
+                )}
+
+                {/* VIEW: EDIT STEP & OPTIONS */}
+                {view === 'EDIT_STEP' && selectedStep && (
                     <motion.div
-                        key="editor"
-                        initial={{ opacity: 0, x: 50 }}
+                        key="edit-step"
+                        initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 50 }}
-                        className="max-w-4xl mx-auto"
+                        exit={{ opacity: 0, x: 20 }}
+                        className="max-w-5xl mx-auto"
                     >
-                        {/* Editor Header */}
-                        <div className="flex items-center justify-between mb-8 sticky top-0 bg-white/90 backdrop-blur z-20 py-4 border-b border-gray-100">
-                            <div className="flex items-center gap-4">
-                                <button
-                                    onClick={() => setViewMode('list')}
-                                    className="p-2 hover:bg-gray-100 rounded-full text-gray-400 hover:text-yoko-dark transition"
-                                >
-                                    <ArrowLeft size={24} />
-                                </button>
-                                <div>
-                                    <h2 className="text-2xl font-bold text-yoko-dark">
-                                        {// @ts-ignore
-                                            editingRule.id ? `Editar ${editingRule.name}` : 'Nuevo Tamaño'}
-                                    </h2>
-                                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                                        <span className={currentStep === 1 ? 'text-yoko-primary font-bold' : ''}>Paso 1: Información</span>
-                                        <ChevronRight size={14} />
-                                        <span className={currentStep === 2 ? 'text-yoko-primary font-bold' : ''}>Paso 2: Reglas</span>
+                        <button onClick={() => setView('EDIT_PRODUCT')} className="flex items-center gap-2 text-slate-400 hover:text-slate-600 font-bold mb-6 transition-colors">
+                            <ArrowLeft size={20} /> Volver a {selectedProduct?.name}
+                        </button>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+                            {/* LEFT: STEP SETTINGS */}
+                            <div className="lg:col-span-1 space-y-6">
+                                <div className="bg-white p-6 rounded-[2rem] shadow-lg border border-slate-100">
+                                    <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
+                                        <Layers className="text-violet-500" size={20} /> Ajustes del Paso
+                                    </h3>
+
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Etiqueta (Título)</label>
+                                            <input
+                                                value={selectedStep.label}
+                                                onChange={e => setSelectedStep({ ...selectedStep, label: e.target.value })}
+                                                className="w-full font-bold bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-violet-500"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Mínimo</label>
+                                                <input
+                                                    type="number"
+                                                    value={selectedStep.min_selections ?? ''}
+                                                    onChange={e => setSelectedStep({ ...selectedStep, min_selections: e.target.value === '' ? 0 : Number(e.target.value) })}
+                                                    placeholder="0"
+                                                    className="w-full font-mono font-bold bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-violet-500"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Máximo (Vacío = ∞)</label>
+                                                <input
+                                                    type="number"
+                                                    value={selectedStep.max_selections ?? ''}
+                                                    onChange={e => setSelectedStep({ ...selectedStep, max_selections: e.target.value === '' ? null : Number(e.target.value) })}
+                                                    placeholder="∞"
+                                                    className="w-full font-mono font-bold bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-violet-500"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100 mt-2">
+                                            <div>
+                                                <label className="block text-xs font-bold text-violet-500 uppercase tracking-wider mb-2">Incluidas (Gratis)</label>
+                                                <input
+                                                    type="number"
+                                                    value={selectedStep.included_selections ?? ''}
+                                                    onChange={e => setSelectedStep({ ...selectedStep, included_selections: e.target.value === '' ? null : Number(e.target.value) })}
+                                                    placeholder="Ej: 1"
+                                                    className="w-full font-mono font-bold bg-violet-50 border border-violet-100 text-violet-700 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-violet-500"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Precio Extra ($)</label>
+                                                <input
+                                                    type="number"
+                                                    value={selectedStep.price_per_extra ?? ''}
+                                                    onChange={e => setSelectedStep({ ...selectedStep, price_per_extra: e.target.value === '' ? null : Number(e.target.value) })}
+                                                    placeholder="Ej: 25"
+                                                    className="w-full font-mono font-bold bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-violet-500"
+                                                />
+                                                <p className="text-[10px] text-slate-400 mt-1">Precio por cada selección adicional</p>
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            onClick={handleSaveStep}
+                                            className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-black transition-colors flex justify-center gap-2 mt-4"
+                                        >
+                                            <Save size={18} /> Guardar Ajustes
+                                        </button>
+
+                                        <button
+                                            onClick={handleDeleteStep}
+                                            className="w-full bg-red-50 text-red-500 font-bold py-3 rounded-xl hover:bg-red-100 transition-colors flex justify-center gap-2 mt-2"
+                                        >
+                                            <Trash2 size={18} /> Eliminar Categoría
+                                        </button>
                                     </div>
                                 </div>
                             </div>
-                            <div className="flex gap-3">
-                                {currentStep === 1 ? (
-                                    <button
-                                        onClick={() => setCurrentStep(2)}
-                                        className="bg-yoko-dark text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-black transition shadow-lg"
-                                    >
-                                        Siguiente <ArrowRight size={18} />
-                                    </button>
-                                ) : (
-                                    <>
-                                        <button
-                                            onClick={() => setCurrentStep(1)}
-                                            className="px-6 py-2.5 rounded-xl font-bold text-gray-500 hover:bg-gray-100 transition"
-                                        >
-                                            Atrás
-                                        </button>
-                                        <button
-                                            onClick={handleSave}
-                                            className="bg-yoko-primary text-white px-8 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-yoko-secondary transition shadow-lg shadow-yoko-primary/30"
-                                        >
-                                            <Save size={18} /> Guardar Todo
-                                        </button>
-                                    </>
-                                )}
-                            </div>
-                        </div>
 
-                        {/* Steps Content */}
-                        <div className="min-h-[400px]">
-                            <AnimatePresence mode="wait">
-                                {currentStep === 1 ? (
-                                    <motion.div
-                                        key="step1"
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, y: -10 }}
-                                        className="bg-white border border-gray-100 rounded-3xl p-8 shadow-sm space-y-8"
-                                    >
+                            {/* RIGHT: OPTIONS LIST */}
+                            <div className="lg:col-span-2">
+                                <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-xl border border-slate-100 min-h-[600px]">
+                                    <div className="flex justify-between items-center mb-8">
                                         <div>
-                                            <label className="block text-sm font-bold text-gray-500 uppercase mb-3">Nombre del Bowl</label>
-                                            <input
-                                                type="text"
-                                                value={editingRule.name || ''}
-                                                onChange={e => updateField('name', e.target.value)}
-                                                className="w-full text-4xl font-bold text-yoko-dark placeholder-gray-200 border-none p-0 focus:ring-0"
-                                                placeholder="Ej. Pokewon"
-                                                autoFocus
-                                            />
-                                            <p className="text-gray-400 text-sm mt-2">Este nombre será visible para los clientes.</p>
+                                            <h3 className="text-2xl font-black text-slate-800">Ingredientes</h3>
+                                            <p className="text-slate-400 text-sm">Opciones disponibles para este paso</p>
                                         </div>
+                                        <button
+                                            onClick={handleCreateOption}
+                                            className="bg-violet-100 text-violet-700 hover:bg-violet-200 px-5 py-2.5 rounded-xl font-bold transition-colors flex items-center gap-2"
+                                        >
+                                            <Plus size={18} /> <span className="hidden md:inline">Nuevo Ingrediente</span>
+                                        </button>
+                                    </div>
 
-                                        <div className="grid grid-cols-2 gap-8 pt-8 border-t border-gray-50">
-                                            <div>
-                                                <label className="block text-sm font-bold text-yoko-primary uppercase mb-3">Precio Base</label>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-3xl font-bold text-gray-300">$</span>
+                                    <div className="grid grid-cols-1 gap-3">
+                                        {stepOptions.map(opt => (
+                                            <div key={opt.id} className="group flex flex-wrap md:flex-nowrap items-center gap-3 md:gap-4 p-3 md:p-4 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-md hover:border-violet-100 transition-all">
+
+                                                {/* Active Toggle */}
+                                                <button
+                                                    onClick={() => handleUpdateOption(opt.id, { is_available: !opt.is_available })}
+                                                    className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${opt.is_available ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-500'}`}
+                                                >
+                                                    {opt.is_available ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
+                                                </button>
+
+                                                {/* Image Upload (Mini) */}
+                                                <div className="w-10 h-10 md:w-12 md:h-12 shrink-0 relative">
+                                                    {opt.image_url ? (
+                                                        <div className="w-full h-full rounded-lg overflow-hidden relative group/img cursor-pointer bg-white border border-slate-200 shadow-sm">
+                                                            <img src={opt.image_url} className="w-full h-full object-cover" />
+                                                            <div
+                                                                className="absolute inset-0 bg-black/50 hidden group-hover/img:flex items-center justify-center text-white"
+                                                                onClick={() => handleUpdateOption(opt.id, { image_url: '' })}
+                                                            >
+                                                                <XCircle size={14} />
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="w-full h-full rounded-lg bg-white border border-slate-200 flex items-center justify-center hover:bg-violet-50 cursor-pointer overflow-hidden relative">
+                                                            <ImageIcon size={16} className="text-slate-300" />
+                                                            <input
+                                                                type="file"
+                                                                data-id={opt.id}
+                                                                className="absolute inset-0 opacity-0 cursor-pointer text-[0]"
+                                                                onChange={async (e) => {
+                                                                    const file = e.target.files?.[0];
+                                                                    if (file) {
+                                                                        const fName = `ingredients/${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+                                                                        const { data } = await supabase.storage.from('menu-images').upload(fName, file);
+                                                                        if (data) {
+                                                                            const { data: url } = supabase.storage.from('menu-images').getPublicUrl(data.path);
+                                                                            handleUpdateOption(opt.id, { image_url: url.publicUrl });
+                                                                        }
+                                                                    }
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Name Input */}
+                                                <input
+                                                    value={opt.name}
+                                                    onChange={e => handleUpdateOption(opt.id, { name: e.target.value })}
+                                                    className="flex-1 min-w-[120px] bg-transparent font-bold text-slate-700 outline-none focus:text-violet-700 px-2 rounded hover:bg-slate-100 transition-colors"
+                                                />
+
+                                                {/* Price Extra */}
+                                                <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-1 ml-auto md:ml-0">
+                                                    <span className="text-xs font-bold text-slate-400">+</span>
+                                                    <DollarSign size={12} className="text-slate-400" />
                                                     <input
                                                         type="number"
-                                                        value={editingRule.base_price || ''}
-                                                        onChange={e => updateField('base_price', parseFloat(e.target.value))}
-                                                        className="w-full text-4xl font-black text-yoko-dark border-none p-0 focus:ring-0"
-                                                        placeholder="0.00"
+                                                        value={opt.price_extra ?? ''}
+                                                        onChange={e => handleUpdateOption(opt.id, { price_extra: e.target.value === '' ? null : Number(e.target.value) })}
+                                                        placeholder="0"
+                                                        className="w-16 bg-transparent text-sm font-mono font-bold text-slate-600 outline-none text-right"
                                                     />
                                                 </div>
+
+                                                {/* Delete */}
+                                                <button
+                                                    onClick={() => handleDeleteOption(opt.id)}
+                                                    className="md:opacity-0 group-hover:opacity-100 p-2 text-slate-300 hover:text-red-500 transition-all"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
                                             </div>
+                                        ))}
 
-                                            {/* Image Upload Area */}
-                                            <div className="relative group">
-                                                <label className="block text-sm font-bold text-gray-400 uppercase mb-3">Imagen del Bowl</label>
-                                                <div className="bg-gray-50 rounded-2xl h-40 flex flex-col justify-center items-center text-center border-2 border-dashed border-gray-200 overflow-hidden relative cursor-pointer hover:border-yoko-primary transition-colors">
-                                                    {editingRule.image_url ? (
-                                                        <>
-                                                            <img src={editingRule.image_url} alt="Preview" className="w-full h-full object-cover" />
-                                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                <span className="text-white font-bold text-sm">Cambiar Imagen</span>
-                                                            </div>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 mb-2 group-hover:bg-yoko-primary/10 group-hover:text-yoko-primary transition">
-                                                                <Star size={20} />
-                                                            </div>
-                                                            <p className="text-xs text-gray-400 font-bold">{uploading ? 'Subiendo...' : 'Clic para subir imagen'}</p>
-                                                        </>
-                                                    )}
-                                                    <input
-                                                        type="file"
-                                                        accept="image/*"
-                                                        onChange={handleImageUpload}
-                                                        disabled={uploading}
-                                                        className="absolute inset-0 opacity-0 cursor-pointer"
-                                                    />
-                                                </div>
+                                        {stepOptions.length === 0 && (
+                                            <div className="text-center py-10 text-slate-400 italic border-2 border-dashed border-slate-200 rounded-xl">
+                                                No hay ingredientes todavía. ¡Agrega uno!
                                             </div>
-                                        </div>
-                                    </motion.div>
-                                ) : (
-                                    <motion.div
-                                        key="step2"
-                                        initial={{ opacity: 0, x: 20 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        exit={{ opacity: 0, x: -20 }}
-                                        className="space-y-6"
-                                    >
-                                        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex gap-3 text-blue-800 text-sm">
-                                            <Utensils size={20} className="shrink-0" />
-                                            <p>Configura cuántas porciones incluye el precio base y cuánto cuesta cada porción extra.</p>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            {CONFIG_SECTIONS.map((section) => (
-                                                <div key={section.id} className="bg-white border border-gray-100 rounded-3xl p-6 hover:shadow-md transition-shadow">
-                                                    <div className="flex items-center gap-3 mb-6">
-                                                        <div className={`w-10 h-10 rounded-xl ${section.color} flex items-center justify-center`}>
-                                                            {section.icon}
-                                                        </div>
-                                                        <h3 className="font-bold text-lg text-yoko-dark">{section.title}</h3>
-                                                    </div>
-
-                                                    <div className="space-y-4">
-                                                        <div className="flex justify-between items-center bg-gray-50 p-3 rounded-xl">
-                                                            <span className="text-sm font-bold text-gray-500">Incluidos</span>
-                                                            <div className="flex items-center gap-3 bg-white px-2 py-1 rounded-lg border border-gray-200">
-                                                                <button
-                                                                    // @ts-ignore
-                                                                    onClick={() => updateField(section.includedKey, Math.max(0, (editingRule[section.includedKey as keyof SizeRule] as number || 0) - 1))}
-                                                                    className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-yoko-primary"
-                                                                >-</button>
-                                                                <span className="w-6 text-center font-bold text-yoko-dark">{editingRule[section.includedKey as keyof SizeRule]}</span>
-                                                                <button
-                                                                    // @ts-ignore
-                                                                    onClick={() => updateField(section.includedKey, (editingRule[section.includedKey as keyof SizeRule] as number || 0) + 1)}
-                                                                    className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-yoko-primary"
-                                                                >+</button>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="flex justify-between items-center bg-gray-50 p-3 rounded-xl">
-                                                            <span className="text-sm font-bold text-gray-500">Costo Extra</span>
-                                                            <div className="flex items-center gap-1 bg-white px-3 py-1.5 rounded-lg border border-gray-200 w-24">
-                                                                <span className="text-xs font-bold text-gray-400">$</span>
-                                                                <input
-                                                                    type="number"
-                                                                    value={editingRule[section.extraKey as keyof SizeRule]}
-                                                                    // @ts-ignore
-                                                                    onChange={e => updateField(section.extraKey, parseFloat(e.target.value))}
-                                                                    className="w-full font-bold text-yoko-dark text-right border-none p-0 focus:ring-0 text-sm"
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </div>
-
-                        {/* Danger Zone (Edit Mode Only) */}
-                        {
-                            // @ts-ignore
-                            editingRule.id && (
-                                <div className="mt-12 border-t border-gray-100 pt-8 opacity-50 hover:opacity-100 transition-opacity">
-                                    <button
-                                        // @ts-ignore
-                                        onClick={() => handleDelete(editingRule.id)}
-                                        className="flex items-center gap-2 text-red-400 hover:text-red-600 font-bold text-sm"
-                                    >
-                                        <Trash2 size={16} /> Eliminar este tamaño permanentemente
-                                    </button>
+                                        )}
+                                    </div>
                                 </div>
-                            )}
+                            </div>
+
+                        </div>
+                    </motion.div>
+                )}
+
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {notification && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 50, scale: 0.9 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 20, scale: 0.9 }}
+                        className={`fixed bottom-8 right-8 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 z-[100] font-bold backdrop-blur-md border border-white/10 ${notification.type === 'success'
+                            ? 'bg-slate-900/90 text-white shadow-violet-500/20'
+                            : 'bg-red-500/90 text-white shadow-red-500/20'
+                            }`}
+                    >
+                        <div className={`p-1 rounded-full ${notification.type === 'success' ? 'bg-green-500/20' : 'bg-white/20'}`}>
+                            {notification.type === 'success' ? <CheckCircle2 size={20} className="text-green-400" /> : <XCircle size={20} className="text-white" />}
+                        </div>
+                        <span className="tracking-wide">{notification.message}</span>
                     </motion.div>
                 )}
             </AnimatePresence>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
-import { Clock, CheckCircle, RefreshCw, User, ShoppingBag } from 'lucide-react';
+import { Clock, CheckCircle, RefreshCw, User, ShoppingBag, MapPin, Phone, TrendingUp, AlertCircle, ChefHat, Sparkles, Flame, Timer, BarChart3, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from '@/components/ui/Toast';
 
@@ -16,10 +16,25 @@ type Order = {
     total: number;
     status: 'pending' | 'preparing' | 'completed' | 'cancelled';
     delivery_method: 'delivery' | 'pickup';
-    items: any[]; // JSON
+    items: any[];
     address?: string;
     phone?: string;
     pickup_time?: string;
+};
+
+// Hook for elapsed time
+const useElapsedMinutes = (dateString: string) => {
+    const [minutes, setMinutes] = useState(0);
+    useEffect(() => {
+        const update = () => {
+            const diff = new Date().getTime() - new Date(dateString).getTime();
+            setMinutes(Math.floor(diff / 60000));
+        };
+        update();
+        const interval = setInterval(update, 30000);
+        return () => clearInterval(interval);
+    }, [dateString]);
+    return minutes;
 };
 
 export default function AdminOrdersPage() {
@@ -27,9 +42,11 @@ export default function AdminOrdersPage() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [incomingOrder, setIncomingOrder] = useState<Order | null>(null);
+    const [activeTab, setActiveTab] = useState<'pending' | 'preparing' | 'completed'>('pending');
+    const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
-    // Initialize audio once
+    // Initialize Audio
     useEffect(() => {
         if (typeof window !== 'undefined') {
             const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
@@ -38,14 +55,13 @@ export default function AdminOrdersPage() {
         }
     }, []);
 
-    // Handle Incoming Order Audio
+    // Audio Logic
     useEffect(() => {
         const audio = audioRef.current;
         if (!audio) return;
-
         if (incomingOrder) {
             audio.currentTime = 0;
-            audio.play().catch(e => console.log("Audio play failed - interaction needed", e));
+            audio.play().catch(() => { });
         } else {
             audio.pause();
             audio.currentTime = 0;
@@ -54,153 +70,142 @@ export default function AdminOrdersPage() {
 
     const fetchOrders = async () => {
         setLoading(true);
-        const { data } = await supabase
-            .from('orders')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(50);
-
+        const { data } = await supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(50);
         if (data) setOrders(data as Order[]);
         setLoading(false);
     };
 
     useEffect(() => {
         fetchOrders();
-
-        // Realtime subscription
         const channel = supabase
-            .channel('orders')
+            .channel('kitchen-ultra-v3')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, payload => {
                 const newOrder = payload.new as Order;
                 setOrders(prev => [newOrder, ...prev]);
-                setIncomingOrder(newOrder); // Open Modal which triggers audio
-                toast.success(`¡Nuevo pedido de ${newOrder.customer_name}!`);
+                setIncomingOrder(newOrder);
+                toast.success(`🎉 Pedido nuevo: ${newOrder.customer_name}`);
             })
-            .subscribe();
-
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') toast.info('👩‍🍳 Cocina Sincronizada');
+            });
         return () => { supabase.removeChannel(channel); };
     }, []);
 
     const updateStatus = async (id: number, status: string) => {
-        const { error } = await supabase.from('orders').update({ status }).eq('id', id);
-
-        if (error) {
-            console.error('Error updating status:', error);
-            toast.error('Error al guardar estado (Revisa Permisos DB).');
-        } else {
-            // Optimistic update
-            setOrders(prev => prev.map(o => o.id === id ? { ...o, status: status as any } : o));
-            toast.success('Estado actualizado');
+        setOrders(prev => prev.map(o => o.id === id ? { ...o, status: status as any } : o));
+        try {
+            const { error } = await supabase.from('orders').update({ status }).eq('id', id);
+            if (error) throw error;
+            toast.success(status === 'preparing' ? '🔥 A cocinar...' : '✅ Pedido completado');
+        } catch (e) {
+            fetchOrders();
+            toast.error('Error de conexión');
         }
     };
 
-    const handleAcceptOrder = async () => {
-        if (incomingOrder) {
-            // Optional: Auto-move to preparing or just acknowledge?
-            // User workflow seems to be: Acknowledge -> Then click "Cook" manually or "Accept" implies cooking.
-            // Let's just acknowledge for now to stop sound.
-            setIncomingOrder(null);
-        }
-    };
-
-    const handleRejectOrder = async () => {
+    const handleReject = async () => {
         if (!incomingOrder) return;
-
-        const { error } = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', incomingOrder.id);
-
-        if (error) {
-            toast.error('Error al rechazar pedido');
-        } else {
-            setOrders(prev => prev.map(o => o.id === incomingOrder.id ? { ...o, status: 'cancelled' } : o));
-            toast.info('Pedido rechazado');
-        }
+        setOrders(prev => prev.filter(o => o.id !== incomingOrder.id));
+        await supabase.from('orders').update({ status: 'cancelled' }).eq('id', incomingOrder.id);
         setIncomingOrder(null);
+        toast.info('Pedido archivado');
     };
 
-    const columns = {
-        pending: { label: 'Pendientes', color: 'bg-yellow-50 text-yellow-600 border-yellow-200', icon: <Clock className="text-yellow-600" /> },
-        preparing: { label: 'Preparando', color: 'bg-blue-50 text-blue-600 border-blue-200', icon: <RefreshCw className="text-blue-600" /> },
-        completed: { label: 'Listos/Entregados', color: 'bg-green-50 text-green-600 border-green-200', icon: <CheckCircle className="text-green-600" /> }
-    };
+    // Stats Logic
+    const pendingCount = orders.filter(o => o.status === 'pending').length;
+    const preparingCount = orders.filter(o => o.status === 'preparing').length;
+    const completedCount = orders.filter(o => o.status === 'completed').length;
+    const totalRevenue = orders.reduce((acc, curr) => acc + (curr.status !== 'cancelled' ? curr.total : 0), 0);
+
+    // Mock Data for Mini Chart (Last 5 orders amount)
+    const recentSales = orders.slice(0, 7).map(o => o.total).reverse();
+    const maxSale = Math.max(...recentSales, 100);
+
+    const tabs = [
+        { id: 'pending', label: 'Por Aceptar', icon: <Flame size={18} />, count: pendingCount, color: 'from-amber-500 to-orange-500' },
+        { id: 'preparing', label: 'Cocinando', icon: <ChefHat size={18} />, count: preparingCount, color: 'from-blue-500 to-indigo-500' },
+        { id: 'completed', label: 'Resumen', icon: <CheckCircle size={18} />, count: completedCount, color: 'from-green-500 to-emerald-500' },
+    ];
 
     return (
-        <div className="h-[calc(100vh-100px)] flex flex-col text-yoko-dark relative">
+        <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans pb-24 md:pb-0 relative overflow-hidden">
 
-            {/* INCOMING ORDER MODAL */}
+            {/* Background Gradients */}
+            <div className="fixed inset-0 pointer-events-none z-0 opacity-40">
+                <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-rose-200/50 blur-[100px]" />
+                <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-blue-200/50 blur-[100px]" />
+            </div>
+
+            {/* --- INCOMING ORDER MODAL --- */}
             <AnimatePresence>
                 {incomingOrder && (
                     <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
                     >
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-xl" />
                         <motion.div
-                            initial={{ scale: 0.9, y: 20 }}
-                            animate={{ scale: 1, y: 0 }}
-                            exit={{ scale: 0.9, y: 20 }}
-                            className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl relative"
+                            initial={{ scale: 0.8, y: 50, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }}
+                            transition={{ type: "spring", bounce: 0.4 }}
+                            className="bg-white/90 w-full max-w-lg rounded-[2.5rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] overflow-hidden relative z-10 border border-white/50 backdrop-blur-xl"
                         >
-                            {/* Header */}
-                            <div className="bg-red-600 text-white p-6 text-center animate-pulse">
-                                <h2 className="text-4xl font-black uppercase tracking-widest">¡Nuevo Pedido!</h2>
-                                <p className="text-lg opacity-90 mt-2">La cocina te necesita 👨‍🍳🔥</p>
+                            {/* Modal Header */}
+                            <div className="bg-gradient-to-br from-rose-500 to-pink-600 text-white p-8 relative overflow-hidden">
+                                <motion.div animate={{ rotate: 360 }} transition={{ duration: 20, repeat: Infinity, ease: "linear" }} className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full border-2 border-white/20 border-dashed" />
+                                <div className="relative z-10 flex flex-col items-center text-center">
+                                    <div className="bg-white/20 p-4 rounded-full mb-4 backdrop-blur-md shadow-inner">
+                                        <AlertCircle size={40} className="text-white drop-shadow-md" />
+                                    </div>
+                                    <h2 className="text-3xl font-black uppercase tracking-tight mb-1 drop-shadow-sm">¡Nueva Comanda!</h2>
+                                    <p className="text-white/90 font-medium tracking-wide text-sm opacity-90">Requiere atención inmediata</p>
+                                </div>
                             </div>
 
-                            {/* Content */}
+                            {/* Modal Content */}
                             <div className="p-8">
-                                <div className="flex justify-between items-start mb-6">
+                                <div className="flex items-center justify-between mb-8 p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
                                     <div>
-                                        <h3 className="text-2xl font-bold text-yoko-dark">{incomingOrder.customer_name}</h3>
-                                        <div className="flex gap-2 mt-2">
-                                            <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${incomingOrder.delivery_method === 'pickup' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700'}`}>
-                                                {incomingOrder.delivery_method === 'pickup' ? 'Recoger' : 'Domicilio'}
-                                            </span>
-                                            {incomingOrder.delivery_method === 'pickup' && incomingOrder.pickup_time && (
-                                                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">
-                                                    ⏰ {incomingOrder.pickup_time}
+                                        <h3 className="text-xl font-bold text-slate-800">{incomingOrder.customer_name}</h3>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            {incomingOrder.delivery_method === 'pickup' ? (
+                                                <span className="flex items-center gap-1 text-xs font-bold bg-orange-100/80 text-orange-700 px-2.5 py-1 rounded-full border border-orange-200/50">
+                                                    <ShoppingBag size={12} /> Recoger {incomingOrder.pickup_time}
+                                                </span>
+                                            ) : (
+                                                <span className="flex items-center gap-1 text-xs font-bold bg-indigo-100/80 text-indigo-700 px-2.5 py-1 rounded-full border border-indigo-200/50">
+                                                    <User size={12} /> Domicilio
                                                 </span>
                                             )}
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-sm text-gray-500">Total</p>
-                                        <p className="text-4xl font-serif font-bold text-yoko-primary">${incomingOrder.total}</p>
+                                        <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Total</span>
+                                        <span className="font-mono text-3xl font-black text-rose-600 tracking-tight">${incomingOrder.total}</span>
                                     </div>
                                 </div>
 
-                                <div className="bg-gray-50 rounded-xl p-6 mb-8 max-h-60 overflow-y-auto custom-scrollbar border border-gray-100">
-                                    <h4 className="text-xs font-bold text-gray-400 uppercase mb-4">Detalles del Pedido</h4>
-                                    <ul className="space-y-4">
-                                        {Array.isArray(incomingOrder.items) && incomingOrder.items.map((item: any, idx: number) => (
-                                            <li key={idx} className="flex gap-4 border-b border-gray-200 last:border-0 pb-4 last:pb-0">
-                                                <div className="bg-white w-10 h-10 rounded-lg flex items-center justify-center shrink-0 shadow-sm text-xl border border-gray-100">
-                                                    {item.productType === 'bowl' ? '🥣' : '🍔'}
-                                                </div>
-                                                <div>
-                                                    <p className="font-bold text-gray-800">{item.name || (item.productType === 'bowl' ? 'Poke Bowl' : 'Sushi Burger')}</p>
-                                                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">
-                                                        {item.base ? `Base: ${item.base.name}. ` : ''}
-                                                        {[...(item.proteins || []), ...(item.mixins || [])].map((i: any) => i.name).join(', ')}
-                                                    </p>
-                                                </div>
-                                            </li>
-                                        ))}
-                                    </ul>
+                                <div className="space-y-4 max-h-[30vh] overflow-y-auto custom-scrollbar pr-2 mb-8">
+                                    {Array.isArray(incomingOrder.items) && incomingOrder.items.map((item: any, i: number) => (
+                                        <div key={i} className="flex gap-4 items-center p-3 hover:bg-slate-50 rounded-xl transition-colors border border-transparent hover:border-slate-100">
+                                            <div className="w-8 h-8 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center font-bold text-sm shrink-0">1</div>
+                                            <div>
+                                                <p className="font-bold text-slate-800">{item.name || 'Bowl Custom'}</p>
+                                                <p className="text-xs text-slate-500 font-medium">
+                                                    {[item.base?.name, ...(item.proteins || []), ...(item.mixins || [])].map((x: any) => x?.name).filter(Boolean).join(', ')}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4">
-                                    <button
-                                        onClick={handleRejectOrder}
-                                        className="py-4 rounded-xl font-bold text-red-500 bg-red-50 hover:bg-red-100 transition-colors"
-                                    >
-                                        Rechazar / Cancelar
+                                    <button onClick={handleReject} className="py-4 font-bold text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-2xl transition-all">
+                                        Ignorar
                                     </button>
-                                    <button
-                                        onClick={handleAcceptOrder}
-                                        className="py-4 rounded-xl font-bold text-white bg-green-600 hover:bg-green-700 shadow-lg hover:shadow-xl transition-all transform active:scale-95"
-                                    >
-                                        ¡Aceptado! A Cocinar 🍳
+                                    <button onClick={() => setIncomingOrder(null)} className="py-4 bg-slate-900 text-white font-bold rounded-2xl shadow-xl shadow-slate-900/30 hover:shadow-2xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 relative overflow-hidden group">
+                                        <span className="relative z-10">Aceptar Orden</span>
+                                        <CheckCircle className="relative z-10" size={18} />
+                                        <div className="absolute inset-0 bg-gradient-to-r from-slate-800 to-black group-hover:bg-slate-800 transition-colors" />
                                     </button>
                                 </div>
                             </div>
@@ -209,127 +214,317 @@ export default function AdminOrdersPage() {
                 )}
             </AnimatePresence>
 
-            <div className="flex justify-between items-center mb-6 px-2">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Pedidos en Vivo</h1>
-                    <p className="text-gray-500 text-sm">Gestiona el flujo de la cocina en tiempo real.</p>
+            {/* --- DASHBOARD HEADER --- */}
+            <div className="sticky top-0 z-40">
+                <div className="absolute inset-0 bg-white/80 backdrop-blur-xl border-b border-white/40 shadow-sm" />
+
+                <div className="max-w-7xl mx-auto px-4 md:px-8 py-3 relative z-10">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+
+                        {/* Left: Brand & Time */}
+                        <div className="flex items-center gap-4">
+                            <div className="bg-gradient-to-br from-rose-500 to-orange-500 text-white p-2.5 rounded-xl shadow-lg shadow-rose-500/30">
+                                <ChefHat size={24} />
+                            </div>
+                            <div>
+                                <h1 className="font-black text-xl tracking-tight text-slate-800">YOKO KITCHEN</h1>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> Live System
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Center: Analytics Cards */}
+                        <div className="hidden md:flex items-center gap-4">
+                            {/* Revenue Card */}
+                            <div className="bg-white/60 backdrop-blur-md rounded-2xl border border-slate-200/60 p-2 pr-4 flex items-center gap-3">
+                                <div className="bg-green-100 text-green-600 p-2 rounded-xl">
+                                    <BarChart3 size={18} />
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] uppercase font-bold text-slate-400">Ventas Hoy</span>
+                                    <span className="text-sm font-black text-slate-800">${totalRevenue.toLocaleString()}</span>
+                                </div>
+                                {/* Mini Sparkline Chart */}
+                                <div className="flex items-end gap-0.5 h-6 pl-2">
+                                    {recentSales.map((val, i) => (
+                                        <div key={i} style={{ height: `${(val / maxSale) * 100}%` }} className="w-1 bg-green-200 rounded-t-sm" />
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Orders Card */}
+                            <div className="bg-white/60 backdrop-blur-md rounded-2xl border border-slate-200/60 p-2 pr-4 flex items-center gap-3">
+                                <div className="bg-blue-100 text-blue-600 p-2 rounded-xl">
+                                    <ShoppingBag size={18} />
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] uppercase font-bold text-slate-400">Entregados</span>
+                                    <span className="text-sm font-black text-slate-800">{completedCount} / {orders.length}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Right: Actions */}
+                        <div className="flex items-center gap-2">
+                            <div className="hidden md:flex bg-slate-100 p-1 rounded-full mr-2">
+                                <button onClick={() => setViewMode('kanban')} className={`p-2 rounded-full transition-all ${viewMode === 'kanban' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400'}`}><BarChart3 size={16} className="rotate-90" /></button>
+                                <button onClick={() => setViewMode('list')} className={`p-2 rounded-full transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400'}`}><BarChart3 size={16} /></button>
+                            </div>
+                            <button onClick={fetchOrders} className="w-10 h-10 flex items-center justify-center rounded-full bg-white hover:bg-slate-50 border border-slate-200 shadow-sm text-slate-500 hover:text-slate-800 transition-all active:scale-95">
+                                <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+                            </button>
+                            <button onClick={() => { if (audioRef.current) { audioRef.current.currentTime = 0; audioRef.current.play(); setTimeout(() => audioRef.current?.pause(), 1000) } }} className="w-10 h-10 flex items-center justify-center rounded-full bg-white hover:bg-slate-50 border border-slate-200 shadow-sm text-slate-500 hover:text-slate-800 transition-all active:scale-95">
+                                <Sparkles size={18} />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Mobile Analytics Summary */}
+                    <div className="md:hidden grid grid-cols-2 gap-3 mt-4">
+                        <div className="bg-white/50 rounded-xl p-3 border border-slate-100 flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-500">Ventas</span>
+                            <span className="text-sm font-black text-slate-800">${totalRevenue}</span>
+                        </div>
+                        <div className="bg-white/50 rounded-xl p-3 border border-slate-100 flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-500">Pedidos</span>
+                            <span className="text-sm font-black text-slate-800">{orders.length}</span>
+                        </div>
+                    </div>
                 </div>
-                <div className="flex gap-2">
-                    <button
-                        onClick={() => {
-                            if (audioRef.current) {
-                                audioRef.current.currentTime = 0;
-                                audioRef.current.play();
-                                setTimeout(() => audioRef.current?.pause(), 2000);
-                            }
-                            toast.info('Probando sonido...');
-                        }}
-                        className="p-3 text-xs font-bold text-gray-400 hover:text-yoko-dark transition"
-                    >
-                        🔊 Test
-                    </button>
-                    <button
-                        onClick={fetchOrders}
-                        className="p-3 bg-white hover:bg-gray-50 rounded-full transition-colors border border-gray-200 shadow-sm"
-                    >
-                        <RefreshCw size={20} className={`text-gray-500 ${loading ? 'animate-spin' : ''}`} />
-                    </button>
+
+                {/* Mobile Tabs */}
+                <div className="md:hidden flex justify-center pb-2 relative z-10 px-4 mt-2">
+                    <div className="flex bg-white/80 backdrop-blur-md p-1 rounded-2xl shadow-sm border border-slate-200/60 w-full">
+                        {tabs.map(tab => {
+                            const isActive = activeTab === tab.id;
+                            return (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id as any)}
+                                    className={`flex-1 relative flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 ${isActive ? 'text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}
+                                >
+                                    {isActive && (
+                                        <motion.div layoutId="activeTab" className={`absolute inset-0 bg-gradient-to-r ${tab.color} rounded-xl`} />
+                                    )}
+                                    <span className="relative z-10 flex items-center gap-1.5">
+                                        {tab.count > 0 && <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{tab.count}</span>}
+                                        {tab.label}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
             </div>
 
-            {/* Kanban Board */}
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 overflow-hidden pb-4">
-                {(Object.entries(columns) as [keyof typeof columns, any][]).map(([status, config]) => (
-                    <div key={status} className="flex flex-col bg-white rounded-3xl p-4 border border-gray-200 h-full shadow-lg shadow-gray-100">
-                        <div className={`flex items-center gap-3 font-bold p-4 rounded-2xl mb-4 border ${config.color}`}>
-                            {config.icon}
-                            <span className="tracking-wide">{config.label}</span>
-                            <span className="ml-auto bg-white/50 px-3 py-1 rounded-lg text-sm tabular-nums shadow-sm">
-                                {orders.filter(o => o.status === status).length}
-                            </span>
+            {/* --- MAIN GRID --- */}
+            <div className="max-w-7xl mx-auto p-4 md:p-8 relative z-10">
+
+                {/* Desktop View */}
+                <div className="hidden md:grid md:grid-cols-4 gap-6 h-[calc(100vh-160px)]">
+
+                    {/* Column 1: PENDING (Large) */}
+                    <div className="flex flex-col h-full bg-white/40 backdrop-blur-sm rounded-3xl border border-slate-200/60 overflow-hidden">
+                        <div className="p-4 bg-white/60 border-b border-slate-100 flex justify-between items-center">
+                            <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs flex items-center gap-2"><Flame size={14} className="text-amber-500" /> Por Aceptar</h3>
+                            <span className="bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded text-xs">{pendingCount}</span>
                         </div>
-
-                        <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                        <div className="p-4 overflow-y-auto space-y-4 custom-scrollbar flex-1">
                             <AnimatePresence mode='popLayout'>
-                                {orders.filter(o => o.status === status).map(order => (
-                                    <motion.div
-                                        layout
-                                        initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                                        exit={{ opacity: 0, scale: 0.9 }}
-                                        key={order.id}
-                                        className="bg-white p-5 rounded-2xl border border-gray-100 hover:border-gray-300 hover:shadow-md transition-all cursor-pointer group shadow-sm relative overflow-hidden"
-                                    >
-                                        <div className="flex justify-between items-start mb-3">
-                                            <span className="font-bold text-lg text-yoko-dark">#{order.id}</span>
-                                            <span className="text-xs text-gray-500 font-mono bg-gray-50 px-2 py-1 rounded-lg">
-                                                {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            </span>
-                                        </div>
-
-                                        <div className="flex items-center gap-2 mb-3">
-                                            <div className={`p-1.5 rounded-full ${order.delivery_method === 'pickup' ? 'bg-orange-100 text-orange-600' : 'bg-purple-100 text-purple-600'}`}>
-                                                {order.delivery_method === 'pickup' ? <ShoppingBag size={14} /> : <User size={14} />}
-                                            </div>
-                                            <div className="min-w-0">
-                                                <p className="font-bold text-gray-700 text-sm truncate">{order.customer_name || 'Sin Nombre'}</p>
-                                                {order.delivery_method === 'pickup' && order.pickup_time && (
-                                                    <p className="text-[10px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded ml-1 inline-block">
-                                                        ⏰ {order.pickup_time}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <div className="text-xs text-gray-500 mb-4 line-clamp-3 leading-relaxed">
-                                            {Array.isArray(order.items) ? (
-                                                <ul className="list-disc pl-4 space-y-1">
-                                                    {order.items.map((item: any, idx: number) => (
-                                                        <li key={idx}>
-                                                            <span className="text-yoko-dark font-medium">1x</span> {item.name || 'Bowl Personalizado'}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            ) : 'Detalles...'}
-                                        </div>
-
-                                        <div className="flex justify-between items-center border-t border-gray-100 pt-4 mt-2">
-                                            <div className="flex flex-col">
-                                                <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Total</span>
-                                                <span className="font-serif font-bold text-2xl text-yoko-dark">${order.total}</span>
-                                            </div>
-
-                                            {status === 'pending' && (
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); updateStatus(order.id, 'preparing'); }}
-                                                    className="group bg-yoko-dark text-white px-6 py-3 rounded-full text-sm font-bold shadow-lg shadow-yoko-dark/30 hover:shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
-                                                >
-                                                    <span className="group-hover:animate-pulse">🔥</span> A Cocinar
-                                                </button>
-                                            )}
-                                            {status === 'preparing' && (
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); updateStatus(order.id, 'completed'); }}
-                                                    className="group bg-green-500 text-white px-6 py-3 rounded-full text-sm font-bold shadow-lg shadow-green-500/30 hover:shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
-                                                >
-                                                    <CheckCircle size={18} className="group-hover:rotate-12 transition-transform" />
-                                                    {order.delivery_method === 'pickup' ? 'Listo p/ Recoger' : 'Enviado'}
-                                                </button>
-                                            )}
-                                        </div>
-                                    </motion.div>
+                                {orders.filter(o => o.status === 'pending').map(order => (
+                                    <OrderCardUltra key={order.id} order={order} updateStatus={updateStatus} />
                                 ))}
                             </AnimatePresence>
-                            {orders.filter(o => o.status === status).length === 0 && (
-                                <div className="text-center py-20 opacity-40">
-                                    <div className="text-5xl mb-4 grayscale">🍃</div>
-                                    <p className="text-sm font-bold uppercase tracking-widest text-gray-400">Sin pedidos</p>
-                                </div>
-                            )}
+                            {pendingCount === 0 && <EmptyStateUltra />}
                         </div>
                     </div>
-                ))}
+
+                    {/* Column 2: PREPARING (Large) */}
+                    <div className="flex flex-col h-full bg-white/40 backdrop-blur-sm rounded-3xl border border-slate-200/60 overflow-hidden">
+                        <div className="p-4 bg-white/60 border-b border-slate-100 flex justify-between items-center">
+                            <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs flex items-center gap-2"><ChefHat size={14} className="text-blue-500" /> Cocinando</h3>
+                            <span className="bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded text-xs">{preparingCount}</span>
+                        </div>
+                        <div className="p-4 overflow-y-auto space-y-4 custom-scrollbar flex-1">
+                            <AnimatePresence mode='popLayout'>
+                                {orders.filter(o => o.status === 'preparing').map(order => (
+                                    <OrderCardUltra key={order.id} order={order} updateStatus={updateStatus} />
+                                ))}
+                            </AnimatePresence>
+                            {preparingCount === 0 && <EmptyStateUltra />}
+                        </div>
+                    </div>
+
+                    {/* Column 3 & 4: COMPLETED (Compact Grid, span 2) */}
+                    <div className="col-span-2 flex flex-col h-full bg-white/40 backdrop-blur-sm rounded-3xl border border-slate-200/60 overflow-hidden">
+                        <div className="p-4 bg-white/60 border-b border-slate-100 flex justify-between items-center">
+                            <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs flex items-center gap-2"><CheckCircle size={14} className="text-green-500" /> Resumen</h3>
+                            <span className="bg-green-100 text-green-700 font-bold px-2 py-0.5 rounded text-xs">{completedCount}</span>
+                        </div>
+                        <div className="p-4 overflow-y-auto custom-scrollbar flex-1">
+                            <div className="grid grid-cols-2 gap-4">
+                                <AnimatePresence mode='popLayout'>
+                                    {orders.filter(o => o.status === 'completed').map(order => (
+                                        <CompactOrderCard key={order.id} order={order} />
+                                    ))}
+                                </AnimatePresence>
+                            </div>
+                            {completedCount === 0 && <EmptyStateUltra />}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Mobile Layout (Standard Stack) */}
+                <div className="md:hidden space-y-4">
+                    <AnimatePresence mode='popLayout'>
+                        {orders.filter(o => o.status === activeTab).map(order => (
+                            activeTab === 'completed'
+                                ? <CompactOrderCard key={order.id} order={order} mobile />
+                                : <OrderCardUltra key={order.id} order={order} updateStatus={updateStatus} />
+                        ))}
+                    </AnimatePresence>
+                    {orders.filter(o => o.status === activeTab).length === 0 && <EmptyStateUltra />}
+                </div>
+
             </div>
         </div>
     );
 }
+
+// --- COMPACT & ULTRA COMPONENTS ---
+
+const CompactOrderCard = ({ order, mobile }: { order: Order, mobile?: boolean }) => (
+    <motion.div
+        layout
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className={`bg-white rounded-xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:border-green-200 transition-all ${mobile ? 'mb-2' : ''}`}
+    >
+        <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-green-50 text-green-600 flex items-center justify-center">
+                <CheckCircle size={14} />
+            </div>
+            <div>
+                <p className="font-bold text-slate-800 text-sm">{order.customer_name}</p>
+                <p className="text-[10px] text-slate-400 font-mono">#{order.id} • ${order.total}</p>
+            </div>
+        </div>
+
+        <div className="text-right">
+            <span className="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md block mb-1">
+                {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+            {order.delivery_method === 'pickup' ? <ShoppingBag size={12} className="ml-auto text-orange-400" /> : <User size={12} className="ml-auto text-indigo-400" />}
+        </div>
+    </motion.div>
+);
+
+const OrderCardUltra = ({ order, updateStatus }: { order: Order, updateStatus: any }) => {
+    const elapsed = useElapsedMinutes(order.created_at);
+
+    // Status Logic
+    const isPending = order.status === 'pending';
+    const isPreparing = order.status === 'preparing';
+
+    // Timer Style
+    let timerStyle = 'text-slate-400 bg-slate-50 border-slate-100';
+    if (isPending) {
+        if (elapsed > 10) timerStyle = 'text-white bg-red-500 border-red-500 animate-pulse shadow-red-200';
+        else if (elapsed > 5) timerStyle = 'text-white bg-amber-500 border-amber-500';
+    }
+
+    return (
+        <motion.div
+            layout
+            initial={{ opacity: 0, scale: 0.9, y: 30 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            className="group relative bg-white rounded-[1.5rem] p-5 shadow-sm border border-slate-100 hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1 transition-all duration-300"
+        >
+            {/* Glow Effect on Hover */}
+            <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-[1.5rem] pointer-events-none bg-gradient-to-tr from-transparent via-transparent to-${isPending ? 'amber' : isPreparing ? 'blue' : 'green'}-500/5`} />
+
+            <div className="flex justify-between items-start mb-5 relative z-10">
+                <div className="flex flex-col">
+                    <span className="font-mono text-[10px] text-slate-400 font-bold tracking-wider mb-1">ID #{order.id}</span>
+                    <span className="text-xl font-black text-slate-800 leading-none">{order.customer_name}</span>
+                </div>
+                <div className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 shadow-sm ${timerStyle}`}>
+                    <Timer size={12} /> {elapsed}m
+                </div>
+            </div>
+
+            {/* Content Items */}
+            <div className="space-y-3 mb-6 relative z-10 pl-1">
+                {order.items.map((item: any, i) => (
+                    <div key={i} className="flex items-start gap-3 text-sm group/item">
+                        <div className="w-5 h-5 rounded-md bg-slate-50 border border-slate-100 flex items-center justify-center text-[10px] font-bold shrink-0 text-slate-400 group-hover/item:text-slate-600 group-hover/item:border-slate-300 transition-colors">1</div>
+                        <div className="leading-tight">
+                            <p className="font-bold text-slate-700">{item.name || (item.productType === 'bowl' ? 'Poke Bowl' : 'Sushi Burger')}</p>
+                            <p className="text-[11px] text-slate-400 font-medium mt-0.5 line-clamp-1">
+                                {[item.base?.name, ...(item.proteins || []), ...(item.mixins || [])].map((x: any) => x?.name).filter(Boolean).join(', ')}
+                            </p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Footer Actions */}
+            <div className="flex items-end justify-between border-t border-slate-50 pt-4 mt-2 relative z-10">
+                <div className="flex flex-col">
+                    <span className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-0.5">Total</span>
+                    <span className="text-2xl font-black text-slate-900 font-mono tracking-tight">${order.total}</span>
+                </div>
+
+                <div className="flex gap-2">
+                    {isPending && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); updateStatus(order.id, 'preparing'); }}
+                            className="bg-gradient-to-r from-slate-900 to-slate-800 text-white pl-4 pr-5 py-3 rounded-2xl text-xs font-bold shadow-lg shadow-slate-900/20 hover:shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2 group/btn"
+                        >
+                            <div className="relative">
+                                <div className="absolute inset-0 bg-rose-500 blur-sm opacity-50 animate-pulse" />
+                                <Flame size={14} className="text-rose-500 relative z-10" />
+                            </div>
+                            COCINAR
+                        </button>
+                    )}
+                    {isPreparing && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); updateStatus(order.id, 'completed'); }}
+                            className="bg-gradient-to-r from-indigo-500 to-blue-600 text-white px-5 py-3 rounded-2xl text-xs font-bold shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
+                        >
+                            <CheckCircle size={16} /> Listo
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* Ribbon/Tag for Delivery Method */}
+            <div className="absolute -right-3 -top-3">
+                {order.delivery_method === 'pickup' ? (
+                    <div className="bg-white text-orange-600 shadow-sm border border-orange-100 p-2 rounded-full">
+                        <ShoppingBag size={14} strokeWidth={3} />
+                    </div>
+                ) : (
+                    <div className="bg-white text-indigo-600 shadow-sm border border-indigo-100 p-2 rounded-full">
+                        <MapPin size={14} strokeWidth={3} />
+                    </div>
+                )}
+            </div>
+        </motion.div>
+    );
+}
+
+const EmptyStateUltra = () => (
+    <div className="flex flex-col items-center justify-center py-20 text-center opacity-40">
+        <div className="w-20 h-20 bg-gradient-to-tr from-slate-100 to-white rounded-3xl shadow-inner border border-white flex items-center justify-center mb-6 transform rotate-6">
+            <ChefHat size={36} className="text-slate-300" />
+        </div>
+        <p className="font-black text-slate-300 text-sm tracking-[0.2em] uppercase">Sin Pedidos</p>
+        <p className="text-xs text-slate-300 mt-2 font-medium">Todo bajo control chef ✨</p>
+    </div>
+);

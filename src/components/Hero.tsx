@@ -28,7 +28,8 @@ export default function Hero() {
 
                     <motion.span
                         initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: false }}
                         transition={{ delay: 0.2 }}
                         className="inline-block py-1 px-3 rounded-full bg-orange-100 text-yoko-accent text-xs font-bold uppercase tracking-widest mb-4 w-fit"
                     >
@@ -37,19 +38,28 @@ export default function Hero() {
 
                     <h1 className="text-5xl lg:text-8xl font-serif font-bold text-yoko-dark mb-4 leading-tight">
                         <motion.span
-                            initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }}
+                            initial={{ opacity: 0, x: -20 }}
+                            whileInView={{ opacity: 1, x: 0 }}
+                            viewport={{ once: false }}
+                            transition={{ delay: 0.4 }}
                             className="block"
                         >
                             YOKO
                         </motion.span>
                         <motion.span
-                            initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }}
+                            initial={{ opacity: 0, x: -20 }}
+                            whileInView={{ opacity: 1, x: 0 }}
+                            viewport={{ once: false }}
+                            transition={{ delay: 0.5 }}
                             className="block"
                         >
                             POKE
                         </motion.span>
                         <motion.span
-                            initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.6 }}
+                            initial={{ opacity: 0, x: -20 }}
+                            whileInView={{ opacity: 1, x: 0 }}
+                            viewport={{ once: false }}
+                            transition={{ delay: 0.6 }}
                             className="block text-yoko-accent"
                         >
                             HOUSE
@@ -57,14 +67,20 @@ export default function Hero() {
                     </h1>
 
                     <motion.p
-                        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: false }}
+                        transition={{ delay: 0.8 }}
                         className="text-lg lg:text-2xl text-gray-600 mb-8 max-w-2xl mx-auto lg:mx-0"
                     >
                         Tu bowl, tus reglas. Ingredientes frescos, combinaciones infinitas.
                     </motion.p>
 
                     <motion.div
-                        initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 1 }}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        whileInView={{ opacity: 1, scale: 1 }}
+                        viewport={{ once: false }}
+                        transition={{ delay: 1 }}
                         className="flex flex-col sm:flex-row justify-center lg:justify-start gap-4"
                     >
                         <motion.a
@@ -90,7 +106,8 @@ export default function Hero() {
                 {/* Image Content */}
                 <motion.div
                     initial={{ opacity: 0, scale: 0.8, rotate: 5 }}
-                    animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                    whileInView={{ opacity: 1, scale: 1, rotate: 0 }}
+                    viewport={{ once: false }}
                     transition={{ delay: 0.5, duration: 0.8 }}
                     className="w-full lg:col-span-6 relative flex justify-center lg:justify-end items-center order-2"
                 >
@@ -120,7 +137,8 @@ export default function Hero() {
                         {/* Floating Ratings Card */}
                         <motion.div
                             initial={{ x: 50, opacity: 0 }}
-                            animate={{ x: 0, opacity: 1 }}
+                            whileInView={{ x: 0, opacity: 1 }}
+                            viewport={{ once: false }}
                             transition={{ delay: 1.2 }}
                             className="hidden lg:block absolute top-10 -right-4 bg-white p-4 rounded-2xl shadow-xl z-20"
                         >

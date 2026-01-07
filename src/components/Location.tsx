@@ -46,7 +46,7 @@ export default function Location() {
                     viewport={{ once: false, amount: 0.3 }}
                     className="relative h-[400px] rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white group"
                 >
-                    {/* Using Google Maps Embed for Comitan search */}
+                    {/* Using Google Maps Embed for Yoko Poke House */}
                     <iframe
                         width="100%"
                         height="100%"
@@ -54,12 +54,12 @@ export default function Location() {
                         allowFullScreen
                         loading="lazy"
                         referrerPolicy="no-referrer-when-downgrade"
-                        src="https://maps.google.com/maps?q=Colonia%20Miguel%20Alem%C3%A1n%2C%20Comit%C3%A1n%20de%20Dom%C3%ADnguez%2C%20Chiapas&t=&z=15&ie=UTF8&iwloc=&output=embed"
+                        src="https://maps.google.com/maps?q=Yoko%20Poke%20House%2C%20Comit%C3%A1n&t=&z=15&ie=UTF8&iwloc=&output=embed"
                         className="group-hover:grayscale-0 grayscale-[20%] transition-all duration-500"
                     >
                     </iframe>
                     <a
-                        href="https://goo.gl/maps/SEARCH_QUERY"
+                        href="https://maps.app.goo.gl/5zvYPaBSQ9qdVLJw7"
                         target="_blank"
                         className="absolute bottom-4 right-4 bg-white px-4 py-2 rounded-lg shadow-md text-xs font-bold text-yoko-dark hover:bg-gray-100 flex items-center gap-2"
                     >

@@ -22,7 +22,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const navItems = [
         { name: 'Menú & Productos', path: '/admin/menu', icon: <Coffee size={20} /> },
         { name: 'Pedidos', path: '/admin/orders', icon: <LayoutDashboard size={20} /> },
-        { name: 'Configuración', path: '/admin/settings', icon: <Settings size={20} /> },
+        { name: 'Condiciona los pokes', path: '/admin/settings', icon: <Settings size={20} /> },
     ];
 
     return (

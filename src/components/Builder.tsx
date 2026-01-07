@@ -1,890 +1,596 @@
+
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Check, ShoppingBag, RotateCcw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, ShoppingBag, AlertCircle, X } from 'lucide-react';
 import Image from 'next/image';
-import confetti from 'canvas-confetti';
 import { useCart } from '@/context/CartContext';
 import { createClient } from '@/lib/supabase';
+import { BuilderSkeleton } from './ui/BuilderSkeleton';
 
-// Types
-type Ingredient = {
+// Animation Variants
+const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+        opacity: 1,
+        transition: {
+            staggerChildren: 0.05
+        }
+    }
+};
+
+const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0 }
+};
+
+// --- Types ---
+type ProductOption = {
     id: number;
     name: string;
-    premium_price?: number; // legacy name match
-    price?: number; // unified alias
-    icon?: string;
-    type: string;
+    price_extra: number;
+    image_url?: string;
+    is_available: boolean;
 };
 
-type OrderState = {
-    productType: 'bowl' | 'burger';
-    size: 'small' | 'medium' | 'large';
-    sizeName?: string; // e.g. "Chico", "Mediano"
-    base: Ingredient | null;
-    proteins: Ingredient[];
-    mixins: Ingredient[];
-    sauces: Ingredient[];
-    toppings: Ingredient[];
-    extras: Ingredient[]; // Crunch usually goes here or toppings
-    price: number;
-};
-
-// Config Rule Type from Supabase
-type SizeRule = {
+type ProductStep = {
     id: number;
-    name: string; // Chico, Mediano, Grande
-    image_url?: string; // New field
+    name: string;
+    label: string;
+    order: number;
+    min_selections: number;
+    max_selections: number | null;
+    included_selections: number;
+    price_per_extra: number;
+    options: ProductOption[];
+};
+// ...
+
+
+
+type Product = {
+    id: number;
+    name: string;
+    slug: string;
+    type?: string;
     base_price: number;
-    included_proteins: number;
-    price_extra_protein: number;
-    included_toppings: number;
-    price_extra_topping: number;
-    included_crunches: number; // mapped to extras/toppings logic
-    price_extra_crunch: number;
-    included_sauces: number;
-    price_extra_sauce: number;
-    included_bases: number;
-    price_extra_base: number;
-    included_extras: number;
-    price_extra_extra: number;
+    description?: string;
+    image_url?: string;
+    steps: ProductStep[];
 };
 
-export default function Builder({ initialProductType = 'bowl', onBack }: { initialProductType?: 'bowl' | 'burger'; onBack?: () => void }) {
+type SelectionState = {
+    [stepId: number]: ProductOption[];
+};
+
+export default function Builder({ initialProductSlug = 'poke-mediano', onBack }: { initialProductSlug?: string; onBack?: () => void }) {
     const supabase = createClient();
     const { addToCart } = useCart();
 
+    // Data State
+    const [product, setProduct] = useState<Product | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-
-    // Config State
-    const [rules, setRules] = useState<SizeRule[]>([]);
-    const [loadingRules, setLoadingRules] = useState(true);
-    const [fetchError, setFetchError] = useState<string | null>(null);
-
-    // Current selection
-    const [currentStep, setCurrentStep] = useState(0);
+    // Builder State
+    const [currentStepIndex, setCurrentStepIndex] = useState(0);
+    const [selections, setSelections] = useState<SelectionState>({});
     const [direction, setDirection] = useState(0);
-    const [menu, setMenu] = useState<Record<string, Ingredient[]>>({});
-    const [loadingIngredients, setLoadingIngredients] = useState(true);
 
-    console.log('Builder Component Rendering...', { loadingRules, loadingIngredients, fetchError });
+    // Mobile Summary State
+    const [isMobileSummaryOpen, setIsMobileSummaryOpen] = useState(false);
 
-    const [order, setOrder] = useState<OrderState>({
-        productType: initialProductType,
-        size: 'medium', // Default to medium/regular
-        sizeName: initialProductType === 'burger' ? 'Sushi Burger' : 'Mediano',
-        base: null,
-        proteins: [],
-        mixins: [],
-        sauces: [],
-        toppings: [],
-        extras: [],
-        price: initialProductType === 'burger' ? 180 : 0
-    });
-
-    // Initial Data Fetch
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                setLoadingRules(true);
-                setLoadingIngredients(true);
-                setFetchError(null);
-
-                // 1. Fetch Rules
-                const { data: rulesData, error: rulesError } = await supabase.from('sizes').select('*').order('id');
-
-                if (rulesError) throw rulesError;
-                if (!rulesData || rulesData.length === 0) throw new Error('No se encontraron reglas de configuración');
-
-                setRules(rulesData as SizeRule[]);
-
-                // Set initial price safely
-                const defaultRule = rulesData.find(r => r.name === 'Mediano') || rulesData[0];
-                if (defaultRule && initialProductType === 'bowl') {
-                    setOrder(prev => ({
-                        ...prev,
-                        price: defaultRule.base_price,
-                        sizeName: defaultRule.name,
-                        size: defaultRule.name === 'Chico' ? 'small' : defaultRule.name === 'Grande' ? 'large' : 'medium'
-                    }));
-                }
-                setLoadingRules(false);
-
-                // 2. Fetch Ingredients
-                const { data: ingredientsData, error: ingredientsError } = await supabase.from('ingredients').select('*').eq('is_available', true);
-
-                if (ingredientsError) throw ingredientsError;
-
-                if (ingredientsData) {
-                    const grouped = ingredientsData.reduce((acc, item) => {
-                        let cat = item.type || item.category || 'others';
-                        cat = cat.toLowerCase();
-                        // Normalize categories (keep sync with logic)
-                        if (cat === 'act' || cat === 'extra') cat = 'extras';
-                        if (cat === 'topping') cat = 'mixins';
-                        if (cat === 'crunch') cat = 'toppings';
-                        if (cat === 'protein') cat = 'proteins';
-                        if (cat === 'base') cat = 'base';
-                        if (cat === 'sauce') cat = 'sauces';
-
-                        if (!acc[cat]) acc[cat] = [];
-                        acc[cat].push({ ...item, price: item.premium_price });
-                        return acc;
-                    }, {} as Record<string, Ingredient[]>);
-                    setMenu(grouped);
-                }
-                setLoadingIngredients(false);
-
-            } catch (err: any) {
-                console.error('Builder Data Error:', err);
-                setFetchError(err.message || 'Error al conectar con el servidor.');
-                setLoadingRules(false);
-                setLoadingIngredients(false);
-            }
-        };
-
-        fetchData();
-
-        // Realtime Subscription for Rules
-        const channel = supabase
-            .channel('public:sizes')
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sizes' }, payload => {
-                console.log('Reglas actualizadas en tiempo real!', payload.new);
-                setRules(prev => prev.map(r => r.id === payload.new.id ? payload.new as SizeRule : r));
-            })
-            .subscribe();
-
-        return () => { supabase.removeChannel(channel); };
-    }, [initialProductType]);
-
-    // Safety Timeout
-    useEffect(() => {
-        let timeout: NodeJS.Timeout;
-        if (loadingRules || loadingIngredients) {
-            timeout = setTimeout(() => {
-                if (loadingRules || loadingIngredients) {
-                    console.error('Safety Timeout Triggered');
-                    setFetchError("La conexión con el servidor ha excedido el tiempo límite. Por favor revisa tu internet.");
-                    setLoadingRules(false);
-                    setLoadingIngredients(false);
-                }
-            }, 10000); // 10 seconds aggressive timeout
-        }
-        return () => clearTimeout(timeout);
-    }, [loadingRules, loadingIngredients]);
-
-    // Recalculate Price whenever Order or Rules change
-    useEffect(() => {
-        // ... (existing bowl logic) ...
-        // We will separate logic per product type inside here or refactor
-
-        if (order.productType === 'burger') {
-            // Simple Burger Logic
-            // Base price from a rule named "Sushi Burger" or fallback
-            const burgerRule = rules.find(r => r.name === 'Sushi Burger');
-            const basePrice = burgerRule ? burgerRule.base_price : 180; // Fallback price
-
-            // Extra ingredients logic if needed (e.g. extra cheese?)
-            // For now, fixed price + extras if any
-            let total = basePrice;
-
-            const allIngredients = [...order.proteins, ...order.extras].filter(Boolean) as Ingredient[];
-            allIngredients.forEach(i => {
-                if (i.price && i.price > 0) total += i.price;
-            });
-
-            setOrder(prev => prev.price !== total ? { ...prev, price: total } : prev);
-        } else {
-            // Existing Bowl Logic (wrapped check)
-            if (rules.length === 0) return;
-            // Ensure activeRule logic handles undefined properly
-            const currentRule = rules.find(r => r.name === order.sizeName) || rules[0];
-            if (!currentRule) return;
-
-            let total = currentRule.base_price;
-            const extraProteins = Math.max(0, order.proteins.length - currentRule.included_proteins);
-            total += extraProteins * currentRule.price_extra_protein;
-            const extraMixins = Math.max(0, order.mixins.length - currentRule.included_toppings);
-            total += extraMixins * currentRule.price_extra_topping;
-            const extraSauces = Math.max(0, order.sauces.length - currentRule.included_sauces);
-            total += extraSauces * currentRule.price_extra_sauce;
-            const extraCrunches = Math.max(0, order.toppings.length - currentRule.included_crunches);
-            total += extraCrunches * currentRule.price_extra_crunch;
-            const allIngredients = [order.base, ...order.proteins, ...order.mixins, ...order.sauces, ...order.toppings, ...order.extras].filter(Boolean) as Ingredient[];
-            allIngredients.forEach(i => {
-                if (i.price && i.price > 0) total += i.price;
-            });
-            setOrder(prev => prev.price !== total ? { ...prev, price: total } : prev);
-        }
-
-    }, [order.base, order.proteins, order.mixins, order.sauces, order.toppings, order.extras, order.sizeName, rules, order.productType]);
-
-
-    // Actions
-    const handleToggle = (stepKey: keyof OrderState, item: Ingredient) => {
-        setOrder(prev => {
-            // Handle single-selection 'base' specifically
-            if (stepKey === 'base') {
-                // Toggle off if same, or replace
-                if (prev.base?.id === item.id) {
-                    return { ...prev, base: null };
-                }
-                return { ...prev, base: item };
-            }
-
-            // Handle multi-selection arrays (or burger flavor disguised as array)
-            const currentList = prev[stepKey] as Ingredient[];
-            const isSelected = currentList.find(i => i.id === item.id);
-
-            if (isSelected) {
-                return { ...prev, [stepKey]: currentList.filter(i => i.id !== item.id) };
-            } else {
-                if (prev.productType === 'burger' && stepKey === 'proteins') {
-                    // Single select for Burger Flavor
-                    return { ...prev, proteins: [item] };
-                }
-
-                // If multi selection
-                if (currentList.length >= 10) return prev; // Safety limit
-                return { ...prev, [stepKey]: [...currentList, item] };
-            }
-        });
-    };
-
-    const handleAddToCart = () => {
-        confetti({
-            particleCount: 100,
-            spread: 70,
-            origin: { y: 0.6 },
-            colors: ['#2F5233', '#B1D8B7', '#94C973'] // Yoko Theme Colors
-        });
-        addToCart({
-            ...order,
-            quantity: 1
-        });
-        resetBuilder();
-    };
-
-    const resetBuilder = () => {
-        const defaultRule = rules.find(r => r.name === 'Mediano') || rules[0];
-        setOrder({
-            productType: order.productType, // Keep current mode
-            size: 'medium',
-            sizeName: 'Mediano',
-            base: null,
-            proteins: [],
-            mixins: [],
-            sauces: [],
-            toppings: [],
-            extras: [],
-            price: order.productType === 'burger' ? (rules.find(r => r.name === 'Sushi Burger')?.base_price || 180) : (defaultRule?.base_price || 0)
-        });
-        setCurrentStep(0);
-    };
-
-    const slideVariants = {
-        enter: (direction: number) => ({ x: direction > 0 ? 50 : -50, opacity: 0 }),
-        center: { x: 0, opacity: 1 },
-        exit: (direction: number) => ({ x: direction < 0 ? 50 : -50, opacity: 0 })
-    };
-
-    const activeRule = rules.find(r => r.name === order.sizeName) || rules[0];
-
-    const BURGER_STEPS = [
-        {
-            key: 'proteins', // Using proteins to store the flavor
-            title: 'Elige tu Sabor',
-            subtitle: 'La esencia de tu Sushi Burger',
-            type: 'single',
-            data: [
-                { id: 991, name: 'Spicy', type: 'flavor', icon: '🌶️', price: 0 },
-                { id: 992, name: 'Arrachera', type: 'flavor', icon: '🥩', price: 0 }
-            ]
-        }
-    ];
-
-    const BOWL_STEPS = [
-        {
-            key: 'size',
-            title: 'Elige tu Tamaño',
-            subtitle: 'La base de tu experiencia',
-            type: 'single',
-            data: rules.map(r => ({ ...r, price: r.base_price, type: 'size', icon: '🥣' }))
-        },
-        {
-            key: 'base',
-            title: 'Elige tu Base',
-            subtitle: activeRule ? `${activeRule.included_bases} Incluidas` : '...',
-            type: 'multi',
-            cat: 'base',
-            limit: activeRule?.included_bases || 1,
-            extraCost: activeRule?.price_extra_base || 0
-        },
-        {
-            key: 'proteins',
-            title: 'Proteínas',
-            subtitle: activeRule ? `${activeRule.included_proteins} Incluidas` : '...',
-            type: 'multi',
-            cat: 'proteins',
-            limit: activeRule?.included_proteins || 2,
-            extraCost: activeRule?.price_extra_protein || 0
-        },
-        {
-            key: 'mixins',
-            title: 'Mixins (Vegetales)',
-            subtitle: activeRule ? `${activeRule.included_toppings} Incluidos` : '...',
-            type: 'multi',
-            cat: 'mixins',
-            limit: activeRule?.included_toppings || 4,
-            extraCost: activeRule?.price_extra_topping || 0
-        },
-        {
-            key: 'sauces',
-            title: 'Salsas',
-            subtitle: activeRule ? `${activeRule.included_sauces} Incluidas` : '...',
-            type: 'multi',
-            cat: 'sauces',
-            limit: activeRule?.included_sauces || 2,
-            extraCost: activeRule?.price_extra_sauce || 0
-        },
-        {
-            key: 'toppings',
-            title: 'Crunch & Toppings',
-            subtitle: activeRule ? `${activeRule.included_crunches} Incluidos` : '...',
-            type: 'multi',
-            cat: 'toppings',
-            limit: activeRule?.included_crunches || 2,
-            extraCost: activeRule?.price_extra_crunch || 0
-        },
-        {
-            key: 'extras',
-            title: 'Extras',
-            subtitle: activeRule ? `${activeRule.included_extras} Incluidos` : '...',
-            type: 'multi',
-            cat: 'extras',
-            limit: activeRule?.included_extras || 0,
-            extraCost: activeRule?.price_extra_extra || 0
-        },
-    ];
-
-    const STEPS = order.productType === 'burger' ? BURGER_STEPS : BOWL_STEPS;
-
-    // Safety Check for "White Screen" bug
-    const currentScreen = STEPS[currentStep];
-    if (!currentScreen) {
-        console.error('Builder Error: Invalid Step Index', { currentStep, totalSteps: STEPS.length, productType: order.productType, rulesLoaded: rules.length > 0 });
-        // Auto-recover if possible
-        if (currentStep > 0) {
-            setCurrentStep(0);
-            return <div className="p-10 text-center">Recuperando sesión...</div>;
-        }
-        return (
-            <div className="p-20 text-center">
-                <h2 className="text-xl font-bold text-red-500 mb-4">Error de Sincronización</h2>
-                <button
-                    onClick={() => window.location.reload()}
-                    className="bg-yoko-dark text-white px-6 py-2 rounded-full font-bold shadow-lg"
-                >
-                    Recargar Página
-                </button>
-            </div>
-        );
-    }
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
 
     // Scroll to top on step change
     useEffect(() => {
-        const builderTitle = document.getElementById('builder-title');
-        if (builderTitle) {
+        if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    }, [currentStepIndex]);
+
+    // Fetch Logic
+    useEffect(() => {
+        const fetchProductTree = async () => {
+            setLoading(true);
             try {
-                builderTitle.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            } catch (e) {
-                // Ignore scroll errors
+                // 1. Fetch Product
+                const { data: prodData, error: prodError } = await supabase
+                    .from('products')
+                    .select('*')
+                    .eq('slug', initialProductSlug)
+                    .single();
+
+                if (prodError || !prodData) throw new Error('Producto no encontrado');
+
+                // 2. Fetch Steps
+                const { data: stepsData, error: stepsError } = await supabase
+                    .from('product_steps')
+                    .select('*')
+                    .eq('product_id', prodData.id)
+                    .order('order', { ascending: true });
+
+                if (stepsError) throw stepsError;
+
+                // 3. Fetch Options
+                const stepIds = stepsData.map(s => s.id);
+                let optionsData: any[] = [];
+
+                if (stepIds.length > 0) {
+                    const { data, error } = await supabase
+                        .from('step_options')
+                        .select('*')
+                        .in('step_id', stepIds)
+                        .eq('is_available', true)
+                        .order('name', { ascending: true });
+                    if (error) throw error;
+                    optionsData = data;
+                }
+
+                // 4. Assemble Tree (with strict type casting)
+                const stepsWithOptions = stepsData.map(step => ({
+                    ...step,
+                    id: Number(step.id),
+                    order: Number(step.order),
+                    min_selections: Number(step.min_selections),
+                    max_selections: step.max_selections === '' || step.max_selections === null ? null : Number(step.max_selections),
+                    included_selections: Number(step.included_selections ?? 0),
+                    price_per_extra: Number(step.price_per_extra ?? 0),
+                    options: optionsData
+                        .filter(opt => Number(opt.step_id) === Number(step.id))
+                        .map(opt => ({
+                            ...opt,
+                            price_extra: Number(opt.price_extra ?? 0)
+                        }))
+                }));
+
+                // Add artificial delay for smooth skeleton transition
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                setProduct({
+                    ...prodData,
+                    base_price: Number(prodData.base_price ?? 0),
+                    steps: stepsWithOptions
+                });
+                setLoading(false);
+
+            } catch (err: any) {
+                console.error(err);
+                setError(err.message || 'Error desconocido');
+                setLoading(false);
+            }
+        };
+
+        if (initialProductSlug) {
+            fetchProductTree();
+        }
+    }, [initialProductSlug, supabase]);
+
+    // Helpers
+    const handleToggleOption = (opt: ProductOption) => {
+        if (!product) return;
+        const step = product.steps[currentStepIndex];
+        const current = selections[step.id] || [];
+        const isSelected = current.some(s => s.id === opt.id);
+
+        let newSelection;
+        if (isSelected) {
+            newSelection = current.filter(s => s.id !== opt.id);
+        } else {
+            // Check limits
+            // Logic: 
+            // 1. If max_selections is 1, always Swap (Radio behavior).
+            // 2. If max_selections > 1 (or null/infinite), Add (Checkbox behavior) unless Hard Limit reached.
+
+            if (step.max_selections === 1) {
+                newSelection = [opt];
+            } else {
+                // Multi-select allowed. Check if Hard Limit reached.
+                if (step.max_selections !== null && current.length >= step.max_selections) {
+                    return; // Hard Limit Max Reached. Cannot add more.
+                    // Optional: Toast "Maximo X alcanzado"
+                }
+                newSelection = [...current, opt];
             }
         }
-    }, [currentStep]);
-
-    const retryFetch = () => window.location.reload();
-
-    if (fetchError) {
-        return (
-            <div className="flex flex-col items-center justify-center h-[50vh] text-center p-4">
-                <div className="text-red-500 mb-4 text-6xl">⚠️</div>
-                <h3 className="text-2xl font-bold text-yoko-dark mb-2">Algo salió mal</h3>
-                <p className="text-gray-500 mb-6">{fetchError}</p>
-                <button
-                    onClick={retryFetch}
-                    className="bg-yoko-primary text-white px-8 py-3 rounded-full font-bold shadow-lg hover:shadow-xl hover:scale-105 transition-all"
-                >
-                    Reintentar
-                </button>
-            </div>
-        );
-    }
-
-    if (loadingRules || loadingIngredients) return (
-        <div className="max-w-7xl mx-auto my-6 lg:my-10 px-4 lg:px-0 animate-pulse">
-            <div className="flex flex-col items-center mb-8 gap-4">
-                <div className="h-10 w-64 bg-gray-200 rounded-full"></div>
-                <div className="h-10 w-48 bg-gray-200 rounded-full"></div>
-            </div>
-            <div className="bg-white h-[85vh] md:h-[80vh] min-h-[500px] flex flex-col lg:flex-row shadow-2xl rounded-3xl overflow-hidden border border-gray-100">
-                {/* Skeleton Sidebar */}
-                <div className="hidden xl:flex w-80 bg-gray-50 flex-col border-r border-gray-100 p-6 relative z-10 gap-4">
-                    <div className="flex justify-between items-center mb-4">
-                        <div className="h-6 w-24 bg-gray-200 rounded"></div>
-                        <div className="h-6 w-6 bg-gray-200 rounded-full"></div>
-                    </div>
-                    <div className="space-y-3 flex-1">
-                        {[1, 2, 3, 4].map(i => (
-                            <div key={i} className="space-y-2">
-                                <div className="h-3 w-16 bg-gray-200 rounded"></div>
-                                <div className="h-4 w-full bg-gray-200 rounded"></div>
-                            </div>
-                        ))}
-                    </div>
-                    <div className="pt-4 border-t border-gray-200">
-                        <div className="h-8 w-full bg-gray-200 rounded-xl"></div>
-                    </div>
-                </div>
-                {/* Skeleton Content */}
-                <div className="flex-1 flex flex-col relative bg-gray-50/30">
-                    <div className="p-4 md:p-8 border-b border-gray-100 bg-white">
-                        <div className="h-8 w-48 bg-gray-200 rounded mb-2"></div>
-                        <div className="h-4 w-32 bg-gray-200 rounded"></div>
-                        <div className="mt-4 h-2 w-full bg-gray-100 rounded-full overflow-hidden">
-                            <div className="h-full w-1/4 bg-gray-200"></div>
-                        </div>
-                    </div>
-                    <div className="p-4 md:p-8 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                        {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-                            <div key={i} className="h-32 bg-white rounded-2xl border border-gray-100 p-4 flex flex-col justify-between">
-                                <div className="flex justify-between">
-                                    <div className="h-8 w-8 bg-gray-200 rounded-full"></div>
-                                    <div className="h-6 w-6 bg-gray-200 rounded-full"></div>
-                                </div>
-                                <div className="space-y-2">
-                                    <div className="h-4 w-24 bg-gray-200 rounded"></div>
-                                    <div className="h-3 w-16 bg-gray-200 rounded"></div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-
-    // Updated sliding variants
-    const stepVariants = {
-        enter: (direction: number) => ({
-            x: direction > 0 ? 50 : -50,
-            opacity: 0,
-            scale: 0.95
-        }),
-        center: {
-            zIndex: 1,
-            x: 0,
-            opacity: 1,
-            scale: 1
-        },
-        exit: (direction: number) => ({
-            zIndex: 0,
-            x: direction < 0 ? 50 : -50,
-            opacity: 0,
-            scale: 0.95,
-            transition: { duration: 0.2 }
-        })
+        setSelections({ ...selections, [step.id]: newSelection });
     };
 
-    const itemVariants = {
-        hidden: { opacity: 0, y: 10 },
-        show: { opacity: 1, y: 0 }
+    const canProceed = (step: ProductStep) => {
+        const current = selections[step.id] || [];
+        return current.length >= step.min_selections;
     };
 
-    // ... (rest of logic)
+    const handleNext = () => {
+        if (!product) return;
+        if (currentStepIndex < product.steps.length - 1) {
+            setDirection(1);
+            setCurrentStepIndex(prev => prev + 1);
+        }
+    };
+
+    const handlePrev = () => {
+        if (currentStepIndex > 0) {
+            setDirection(-1);
+            setCurrentStepIndex(prev => prev - 1);
+        }
+    };
+
+    const calculateTotal = () => {
+        if (!product) return 0;
+        let total = product.base_price;
+
+        product.steps.forEach(step => {
+            const stepSels = selections[step.id] || [];
+            // Ensure included is a number (handle null/string)
+            const included = Number(step.included_selections ?? 0);
+
+            stepSels.forEach((sel, idx) => {
+                // Logic: The first 'included' selections are fully free (waive option price + step extra price).
+                const isFree = idx < included;
+
+                if (!isFree) {
+                    // It's an extra. Charge Step Price + Option Premium
+                    total += (step.price_per_extra || 0);
+                    if (sel.price_extra) total += sel.price_extra;
+                }
+            });
+        });
+
+        return total;
+    };
+
+    const handleAddToCart = () => {
+        if (!product) return;
+
+        // Flatten details for display with price breakdown
+        const details: { label: string; value: string }[] = [];
+
+        product.steps.forEach(step => {
+            const sels = selections[step.id] || [];
+            if (sels.length > 0) {
+                const included = Number(step.included_selections ?? 0);
+
+                const formattedValues = sels.map((sel, idx) => {
+                    const isFree = idx < included;
+                    let extraCost = 0;
+
+                    if (!isFree) {
+                        extraCost += (Number(step.price_per_extra) || 0);
+                        if (sel.price_extra) extraCost += Number(sel.price_extra);
+                    }
+
+                    return extraCost > 0
+                        ? `${sel.name} (+$${extraCost})`
+                        : sel.name;
+                });
+
+                details.push({
+                    label: step.label,
+                    value: formattedValues.join(', ')
+                });
+            }
+        });
+
+        // Calculate breakdown
+        const total = calculateTotal();
+        const base = Number(product.base_price);
+        const extras = total - base;
+
+        addToCart({
+            name: product.name,
+            productType: product.type === 'burger' ? 'burger' : 'bowl',
+            price: total,
+            quantity: 1,
+            // @ts-ignore
+            details: details,
+            image: product.image_url,
+            priceBreakdown: {
+                base: base,
+                extras: extras
+            }
+        }, true); // Open drawer
+
+        if (onBack) onBack();
+    };
+
+
+    // --- RENDER ---
+
+    if (loading) return <div className="min-h-screen flex items-center justify-center text-slate-400 font-bold animate-pulse">Cargando constructor...</div>;
+    if (error || !product) return <div className="min-h-screen flex items-center justify-center text-red-500 font-bold">Error: {error}</div>;
+
+    const currentStep = product.steps[currentStepIndex];
+    if (!currentStep) return <div>Fin del camino.</div>;
 
     return (
-        <div id="builder" className="max-w-7xl mx-auto my-6 lg:my-10 px-4 lg:px-0">
-            {/* Header with Switcher */}
-            <div className="flex flex-col items-center mb-8 gap-4">
-                <h1 id="builder-title" className="font-serif text-3xl md:text-4xl text-yoko-dark font-bold text-center">
-                    {order.productType === 'bowl' ? 'Crea tu Bowl Perfecto' : 'Diseña tu Sushi Burger'}
-                </h1>
-                <div className="bg-white p-1 rounded-full shadow-sm border border-gray-100 flex gap-1 transform hover:scale-105 transition-transform duration-300">
-                    <button
-                        onClick={() => {
-                            setOrder({
-                                productType: 'bowl', size: 'medium', sizeName: 'Mediano', base: null, proteins: [], mixins: [], sauces: [], toppings: [], extras: [],
-                                price: rules.find(r => r.name === 'Mediano')?.base_price || 0
-                            });
-                            setCurrentStep(0);
-                        }}
-                        className={`px-6 py-2 rounded-full font-bold text-sm md:text-base transition-all ${order.productType === 'bowl' ? 'bg-yoko-dark text-white shadow-md' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
-                    >
-                        🥣 Poke Bowl
-                    </button>
-                    <button
-                        onClick={() => {
-                            setOrder({
-                                productType: 'burger', size: 'medium', sizeName: 'Sushi Burger', base: null, proteins: [], mixins: [], sauces: [], toppings: [], extras: [],
-                                price: rules.find(r => r.name === 'Sushi Burger')?.base_price || 180
-                            });
-                            setCurrentStep(0);
-                        }}
-                        className={`px-6 py-2 rounded-full font-bold text-sm md:text-base transition-all flex items-center gap-2 ${order.productType === 'burger' ? 'bg-yoko-dark text-white shadow-md' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
-                    >
-                        🍔 Sushi Burger <span className="text-[10px] bg-red-500 text-white px-2 py-0.5 rounded-full animate-pulse">HOT</span>
-                    </button>
-                </div>
-            </div>
+        <div className="fixed inset-0 bg-white z-50 flex flex-col lg:flex-row">
 
-            <div className="bg-white h-[85vh] md:h-[80vh] min-h-[500px] flex flex-col lg:flex-row shadow-2xl rounded-3xl overflow-hidden border border-gray-100">
-
-                {/* Sidebar (Desktop) */}
-                <div className="hidden xl:flex w-80 bg-gray-50 flex-col border-r border-gray-100 p-6 relative z-10">
-                    <div className="mb-6 flex justify-between items-center">
-                        <h3 className="font-serif font-bold text-xl text-yoko-dark flex items-center gap-2">
-                            <ShoppingBag size={20} className="text-yoko-primary" /> Tu Pedido
-                        </h3>
-                        <button onClick={resetBuilder} className="text-gray-400 hover:text-red-500 transition p-2 hover:bg-red-50 rounded-full" title="Reiniciar">
-                            <RotateCcw size={16} />
-                        </button>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-2 pb-20">
-                        {/* Dynamic Summary List */}
-                        {/* Header Info */}
-                        <div className="pb-4 border-b border-gray-100">
-                            <div className="flex justify-between items-center mb-1">
-                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Base</span>
-                                <span className="text-sm font-bold text-yoko-dark text-right">{order.productType === 'bowl' ? (order.sizeName || activeRule?.name) : 'Sushi Burger'}</span>
-                            </div>
-                            {order.productType === 'bowl' && (
-                                <div className="flex justify-between items-start mt-2">
-                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-0.5">Arroz</span>
-                                    <span className="text-sm text-gray-600 text-right w-2/3 leading-tight">{order.base ? order.base.name : <span className="text-gray-300 italic">Sin elegir</span>}</span>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Ingredients List */}
-                        {order.productType === 'bowl' ? (
-                            [
-                                { key: 'proteins', label: 'Proteínas', items: order.proteins },
-                                { key: 'mixins', label: 'Mixins', items: order.mixins },
-                                { key: 'sauces', label: 'Salsas', items: order.sauces },
-                                { key: 'toppings', label: 'Toppings', items: order.toppings },
-                                { key: 'extras', label: 'Extras', items: order.extras },
-                            ].map(group => group.items.length > 0 && (
-                                <div key={group.key} className="space-y-2">
-                                    <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest">{group.label}</span>
-                                    <div className="space-y-2">
-                                        {group.items.map(item => (
-                                            <div key={item.id} className="flex justify-between text-sm group">
-                                                <span className="text-gray-700 font-medium group-hover:text-yoko-dark transition-colors">{item.name}</span>
-                                                {item.price ? <span className="text-xs font-bold text-yoko-accent bg-green-50 px-1.5 py-0.5 rounded-md border border-green-100">+${item.price}</span> : null}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))
-                        ) : (
-                            // Burger Summary
-                            order.proteins.length > 0 && (
-                                <div className="space-y-2">
-                                    <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Sabor</span>
-                                    <div className="flex justify-between items-center text-sm p-3 bg-white rounded-xl border border-gray-100 shadow-sm">
-                                        <span className="text-gray-700 font-bold flex items-center gap-2">
-                                            <span className="text-xl">{order.proteins[0].icon}</span> {order.proteins[0].name}
-                                        </span>
-                                    </div>
-                                </div>
-                            )
-                        )}
-                    </div>
-                    {/* Footer Total */}
-                    {/* Footer Total & Actions for Desktop in Sidebar */}
-                    <div className="absolute bottom-0 left-0 w-full bg-white border-t border-gray-100 p-6 z-20 shadow-[0_-5px_20px_rgba(0,0,0,0.02)]">
-                        <div className="flex flex-col gap-4">
-                            <div className="flex justify-between items-end">
-                                <span className="text-gray-400 font-bold text-sm uppercase tracking-wider mb-1">Total Confirmado</span>
-                                <motion.span
-                                    key={order.price}
-                                    initial={{ scale: 1.2, color: "#2F5233" }}
-                                    animate={{ scale: 1, color: "#2F5233" }}
-                                    className="text-3xl font-serif font-bold text-yoko-primary"
-                                >
-                                    ${order.price}
-                                </motion.span>
-                            </div>
-
-                            {/* Desktop Actions */}
-                            <div className="hidden xl:flex gap-3 mt-2">
-                                <motion.button
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                    disabled={currentStep === 0 && !onBack}
-                                    onClick={() => {
-                                        if (currentStep === 0 && onBack) {
-                                            onBack();
-                                        } else {
-                                            setDirection(-1);
-                                            setCurrentStep(prev => Math.max(0, prev - 1));
-                                        }
-                                    }}
-                                    className={`px-6 py-3.5 rounded-full font-bold transition-all duration-300 flex items-center justify-center
-                                    ${currentStep === 0 && !onBack
-                                            ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
-                                            : 'bg-white text-gray-600 hover:bg-gray-50 hover:text-yoko-dark border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md'}`}
-                                >
-                                    <ChevronLeft size={18} className="mr-1" />
-                                    {currentStep === 0 && onBack ? 'Salir' : 'Atrás'}
-                                </motion.button>
-
-                                {currentStep === STEPS.length - 1 ? (
-                                    <motion.button
-                                        whileHover={{ scale: 1.05, boxShadow: "0 10px 25px -5px rgba(255, 140, 105, 0.5)" }}
-                                        whileTap={{ scale: 0.95 }}
-                                        onClick={handleAddToCart}
-                                        disabled={order.productType === 'burger' && order.proteins.length === 0}
-                                        className="flex-1 bg-yoko-salmon text-white py-3.5 rounded-full font-bold transition-all shadow-lg hover:shadow-yoko-salmon/40 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                    >
-                                        <ShoppingBag size={18} />
-                                        <span>Agregar al Pedido</span>
-                                    </motion.button>
-                                ) : (
-                                    <motion.button
-                                        whileHover={{ scale: 1.05, boxShadow: "0 10px 25px -5px rgba(26, 26, 26, 0.4)" }}
-                                        whileTap={{ scale: 0.95 }}
-                                        onClick={() => {
-                                            setDirection(1);
-                                            setCurrentStep(prev => Math.min(STEPS.length - 1, prev + 1));
-                                        }}
-                                        disabled={order.productType === 'burger' && currentStep === 0 && order.proteins.length === 0}
-                                        className="flex-1 bg-yoko-dark text-white py-3.5 rounded-full font-bold transition-all shadow-lg hover:shadow-yoko-dark/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                    >
-                                        <span>Siguiente Paso</span>
-                                        <ChevronRight size={18} />
-                                    </motion.button>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Main Content Area */}
-                <div className="flex-1 flex flex-col relative bg-gray-50/30">
-                    {/* Step Header */}
-                    <div className="p-4 md:p-8 border-b border-gray-100 bg-white sticky top-0 z-20 shadow-sm">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4 mb-3 md:mb-4">
-                            <div>
-                                <h2 className="text-xl md:text-3xl font-serif font-bold text-yoko-dark flex items-center gap-3">
-                                    {currentScreen.title}
-                                </h2>
-                                <p className="text-gray-400 mt-1 font-medium">{currentScreen.subtitle}</p>
-                            </div>
-
-                            {/* Selection Limit Indicator */}
-                            {(currentScreen as any).limit && (currentScreen as any).type === 'multi' && (
-                                <div className={`px-4 py-2 rounded-xl flex flex-col items-center border-2 ${((order[currentScreen.key as keyof OrderState] as Ingredient[]) || []).length >= ((currentScreen as any).limit || 0)
-                                    ? 'bg-green-50 border-green-200 text-yoko-primary'
-                                    : 'bg-gray-50 border-gray-100 text-gray-400'
-                                    }`}>
-                                    <span className="text-xs font-bold uppercase tracking-wider">Seleccionado</span>
-                                    <span className="text-lg font-black leading-none">
-                                        {((order[currentScreen.key as keyof OrderState] as Ingredient[]) || []).length}
-                                        <span className="text-sm font-medium text-gray-300">/{(currentScreen as any).limit}</span>
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Progress Bar */}
-                        <div className="flex items-center gap-3 mt-4">
-                            <span className="text-xs font-bold text-gray-300 font-mono">{(currentStep + 1).toString().padStart(2, '0')}</span>
-                            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                <motion.div
-                                    className="h-full bg-gradient-to-r from-yoko-primary to-yoko-accent"
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${((currentStep + 1) / STEPS.length) * 100}%` }}
-                                    transition={{ duration: 0.5, ease: "circOut" }}
-                                />
-                            </div>
-                            <span className="text-xs font-bold text-gray-300 font-mono">{STEPS.length.toString().padStart(2, '0')}</span>
-                        </div>
-                    </div>
-
-                    {/* Scrollable Content */}
-                    <div className="flex-1 p-4 md:p-8 overflow-y-auto custom-scrollbar relative overflow-x-hidden">
-                        <AnimatePresence mode="popLayout" custom={direction} initial={false}>
-                            <motion.div
-                                key={`${order.productType}-${currentStep}`}
-                                custom={direction}
-                                variants={stepVariants}
-                                initial="enter"
-                                animate="center"
-                                exit="exit"
-                                transition={{
-                                    x: { type: "spring", stiffness: 300, damping: 30 },
-                                    opacity: { duration: 0.2 }
-                                }}
-                                className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-24 lg:pb-0"
-                            >
-                                {currentScreen.key === 'size' && order.productType === 'bowl' ? (
-                                    currentScreen.data && currentScreen.data.map((sizeOption: any) => (
-                                        <motion.div
-                                            variants={itemVariants}
-                                            key={sizeOption.id}
-                                            whileHover={{
-                                                y: -5,
-                                                scale: 1.02,
-                                                boxShadow: "0 20px 30px -10px rgba(0,0,0,0.1)"
-                                            }}
-                                            whileTap={{ scale: 0.95 }}
-                                            onClick={() => setOrder(prev => ({ ...prev, size: sizeOption.name === 'Chico' ? 'small' : sizeOption.name === 'Grande' ? 'large' : 'medium', sizeName: sizeOption.name, price: sizeOption.price }))}
-                                            className={`group p-6 rounded-[2rem] cursor-pointer transition-all duration-300 flex flex-col items-center justify-center gap-4 relative overflow-hidden transform-gpu will-change-transform
-                                            ${order.sizeName === sizeOption.name
-                                                    ? 'bg-white shadow-[0_10px_40px_-10px_rgba(255,140,105,0.4)] ring-2 ring-yoko-salmon'
-                                                    : 'bg-white shadow-sm hover:shadow-md border border-transparent hover:border-gray-100'}`}
-                                        >
-                                            {order.sizeName === sizeOption.name && (
-                                                <div className="absolute top-4 right-4 text-yoko-salmon bg-red-50 p-1 rounded-full">
-                                                    <Check size={16} strokeWidth={4} />
-                                                </div>
-                                            )}
-
-                                            {sizeOption.image_url ? (
-                                                <div className="w-32 h-32 relative transform-gpu transition-transform duration-500 group-hover:scale-110">
-                                                    <Image
-                                                        src={sizeOption.image_url}
-                                                        alt={sizeOption.name}
-                                                        fill
-                                                        sizes="(max-width: 768px) 100px, 150px"
-                                                        className="object-contain"
-                                                        onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.classList.add('fallback-icon'); }}
-                                                    />
-                                                    <div className="hidden fallback-icon:block text-6xl absolute inset-0 flex items-center justify-center">🥣</div>
-                                                </div>
-                                            ) : (
-                                                <span className="text-6xl mb-2 transform group-hover:rotate-12 transition-transform">🥣</span>
-                                            )}
-
-                                            <div className="text-center">
-                                                <h4 className="font-serif font-bold text-xl text-yoko-dark mb-1">{sizeOption.name}</h4>
-                                                <span className="inline-block bg-yoko-dark/5 text-yoko-dark font-bold px-3 py-1 rounded-full text-sm">
-                                                    ${sizeOption.price}
-                                                </span>
-                                            </div>
-                                        </motion.div>
-                                    ))
-                                ) : (
-                                    (currentScreen.data || menu[currentScreen.cat!] || []).map((item: any) => {
-                                        const currentList = order[currentScreen.key as keyof OrderState];
-                                        const isSelected = Array.isArray(currentList) ? currentList.some(i => i.id === item.id) : (currentList as Ingredient)?.id === item.id;
-
-                                        return (
-                                            <motion.div
-                                                variants={itemVariants}
-                                                key={item.id}
-                                                whileHover={{ scale: 1.03, y: -2 }}
-                                                whileTap={{ scale: 0.95 }}
-                                                onClick={() => handleToggle(currentScreen.key as keyof OrderState, item)}
-                                                className={`relative p-4 rounded-2xl transition-all duration-300 cursor-pointer flex flex-col justify-between h-36 group
-                                                ${isSelected
-                                                        ? 'bg-yoko-salmon text-white shadow-[0_10px_25px_-5px_rgba(255,140,105,0.4)]'
-                                                        : 'bg-white text-gray-500 shadow-sm hover:shadow-md border border-gray-50'
-                                                    }`}
-                                            >
-                                                <div className="flex justify-between items-start">
-                                                    <span className={`text-4xl transform transition-transform duration-300 ${isSelected ? 'scale-110' : 'group-hover:scale-110'}`}>
-                                                        {item.icon || '🥬'}
-                                                    </span>
-                                                    <motion.div
-                                                        initial={false}
-                                                        animate={{ scale: isSelected ? 1 : 0, opacity: isSelected ? 1 : 0 }}
-                                                        className="w-6 h-6 rounded-full bg-white text-yoko-salmon flex items-center justify-center shadow-sm"
-                                                    >
-                                                        <Check size={14} strokeWidth={4} />
-                                                    </motion.div>
-                                                </div>
-
-                                                <div>
-                                                    <h4 className={`font-bold leading-tight mb-1 text-sm line-clamp-2 ${isSelected ? 'text-white' : 'text-yoko-dark'}`}>
-                                                        {item.name}
-                                                    </h4>
-                                                    {item.price ? (
-                                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-block ${isSelected ? 'bg-white/20 text-white' : 'bg-red-50 text-yoko-accent'}`}>
-                                                            +${item.price}
-                                                        </span>
-                                                    ) : (
-                                                        <span className={`text-[10px] uppercase tracking-wider font-bold opacity-60 ${isSelected ? 'text-white' : 'text-gray-300'}`}>
-                                                            Incluido
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </motion.div>
-                                        );
-                                    })
-                                )}
-                            </motion.div>
-                        </AnimatePresence>
-                    </div>
-
-                    {/* Mobile Footer Controls (Hidden on XL) */}
-                    <div className="xl:hidden p-4 border-t border-gray-100 bg-white/95 backdrop-blur-xl sticky bottom-0 z-30 flex justify-between items-center gap-4 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
-                        <motion.button
-                            whileTap={{ scale: 0.9 }}
-                            disabled={currentStep === 0}
-                            onClick={() => {
-                                setDirection(-1);
-                                setCurrentStep(prev => Math.max(0, prev - 1));
-                            }}
-                            className={`p-4 rounded-full transition-all duration-300 ${currentStep === 0 ? 'bg-gray-50 text-gray-300' : 'bg-gray-100 text-yoko-dark hover:bg-gray-200'}`}
-                        >
+            {/* LEFT: CONTENT */}
+            <div className="flex-1 flex flex-col h-full bg-slate-50/50 relative">
+                {/* Header */}
+                <header className="px-4 md:px-8 py-4 md:py-6 flex justify-between items-center bg-white border-b border-slate-100 z-20">
+                    <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold transition-colors group">
+                        <div className="p-2 rounded-full bg-slate-100 group-hover:bg-slate-200 transition-colors">
                             <ChevronLeft size={20} />
-                        </motion.button>
-
-                        <div className="flex-1 flex flex-col items-center">
-                            <span className="text-[10px] uppercase text-gray-400 font-bold tracking-widest">Total</span>
-                            <motion.span
-                                key={order.price}
-                                initial={{ scale: 1.2 }}
-                                animate={{ scale: 1 }}
-                                className="font-serif font-black text-2xl text-yoko-primary leading-none"
-                            >
-                                ${order.price}
-                            </motion.span>
                         </div>
+                        <span className="hidden sm:inline">Cancelar</span>
+                    </button>
 
-                        {currentStep === STEPS.length - 1 ? (
-                            <motion.button
-                                whileHover={{ scale: 1.05, boxShadow: "0 10px 25px -5px rgba(255, 140, 105, 0.5)" }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={handleAddToCart}
-                                disabled={order.productType === 'burger' && order.proteins.length === 0}
-                                className="px-8 py-4 bg-yoko-salmon text-white rounded-full font-bold shadow-lg shadow-yoko-salmon/30 flex items-center gap-2"
-                            >
-                                <span className="text-sm">Agregar</span> <ShoppingBag size={18} />
-                            </motion.button>
-                        ) : (
-                            <motion.button
-                                whileHover={{ scale: 1.05, boxShadow: "0 10px 25px -5px rgba(26, 26, 26, 0.4)" }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={() => {
-                                    setDirection(1);
-                                    setCurrentStep(prev => Math.min(STEPS.length - 1, prev + 1));
-                                }}
-                                disabled={order.productType === 'burger' && currentStep === 0 && order.proteins.length === 0}
-                                className="px-8 py-4 bg-yoko-dark text-white rounded-full font-bold shadow-lg shadow-yoko-dark/30 flex items-center gap-2"
-                            >
-                                <span className="text-sm">Siguiente</span> <ChevronRight size={18} />
-                            </motion.button>
-                        )}
+                    <div className="flex flex-col items-center">
+                        <span className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Armando tu</span>
+                        <h2 className="text-lg md:text-xl font-black text-slate-900 uppercase tracking-tight">{product.name}</h2>
                     </div>
+
+                    <div className="w-24 flex justify-end">
+                        {/* Mobile Summary Toggle */}
+                        <button
+                            onClick={() => setIsMobileSummaryOpen(true)}
+                            className="lg:hidden flex flex-col items-end"
+                        >
+                            <span className="text-xs font-bold text-slate-400 uppercase">Total</span>
+                            <span className="font-mono font-bold text-lg text-violet-600">${calculateTotal()}</span>
+                        </button>
+                        <span className="hidden lg:block font-mono font-bold text-lg text-violet-600">${calculateTotal()}</span>
+                    </div>
+                </header>
+
+                {/* Step Area */}
+                <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-12 pb-32">
+                    <AnimatePresence mode="wait" custom={direction}>
+                        <motion.div
+                            key={currentStep.id}
+                            custom={direction}
+                            initial={{ x: direction > 0 ? 50 : -50, opacity: 0 }}
+                            animate={{ x: 0, opacity: 1 }}
+                            exit={{ x: direction > 0 ? -50 : 50, opacity: 0 }}
+                            transition={{ duration: 0.3, ease: "circOut" }}
+                            className="max-w-4xl mx-auto"
+                        >
+                            <div className="text-center mb-8 md:mb-12">
+                                <span className="text-xs font-bold text-violet-500 tracking-widest uppercase mb-2 block">Paso {currentStepIndex + 1} de {product.steps.length}</span>
+                                <h3 className="text-3xl md:text-5xl font-black text-slate-900 mb-4 leading-tight">{currentStep.label}</h3>
+                                <div className="inline-flex items-center gap-2 px-4 py-2 bg-white rounded-full border border-slate-200 shadow-sm text-sm font-bold text-slate-600">
+                                    <AlertCircle size={16} className="text-violet-500" />
+                                    Elige {currentStep.max_selections ? `hasta ${currentStep.max_selections}` : 'tus favoritos'}
+                                </div>
+                                {/* DEBUG: Remove after fixing */}
+                                <div className="text-xs text-red-500 mt-2 font-mono">
+                                    Debug: Opts {currentStep.options.length} | ID {currentStep.id}
+                                </div>
+                            </div>
+
+                            <motion.div
+                                className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+                                variants={containerVariants}
+                                initial="hidden"
+                                animate="show"
+                                key={currentStep.id} // Re-trigger on step change
+                            >
+                                {currentStep.options.length === 0 && (
+                                    <div className="col-span-full text-center text-slate-400 py-10">
+                                        No hay opciones disponibles para este paso.
+                                    </div>
+                                )}
+                                {currentStep.options.map((opt) => {
+                                    const currentSels = selections[currentStep.id] || [];
+                                    const isSelected = currentSels.some(s => s.id === opt.id);
+
+                                    // Dynamic Pricing Logic for Display
+                                    const includedCount = currentStep.included_selections || 0;
+                                    const alreadySelectedCount = currentSels.length;
+
+                                    // Calculate actual cost if I were to add this item
+                                    let displayPrice = 0;
+
+                                    if (!isSelected) {
+                                        // Will this be the (N+1)th item?
+                                        const predictionIndex = alreadySelectedCount; // 0-based, so if 0 selected, prediction is 0 (1st item)
+                                        const isFree = predictionIndex < includedCount;
+
+                                        if (!isFree) {
+                                            // It will cost Extra
+                                            displayPrice += (currentStep.price_per_extra || 0);
+                                            if (opt.price_extra) displayPrice += opt.price_extra;
+                                        }
+                                    } else {
+                                        // If already selected, show what it IS costing? 
+                                        // Or usually show nothing or the static price?
+                                        // For a clean UI, we just show "+$Price" if it IS costing money.
+                                        // We need to know its index in selection.
+                                        const myIndex = currentSels.findIndex(s => s.id === opt.id);
+                                        const isFree = myIndex !== -1 && myIndex < includedCount;
+
+                                        if (!isFree) {
+                                            displayPrice += (currentStep.price_per_extra || 0);
+                                            if (opt.price_extra) displayPrice += opt.price_extra;
+                                        }
+                                    }
+
+                                    return (
+                                        <motion.div
+                                            key={opt.id}
+                                            variants={itemVariants}
+                                            onClick={() => handleToggleOption(opt)}
+                                            className={`
+                                                cursor-pointer rounded-2xl p-4 border transition-all duration-200 group relative overflow-hidden transform-gpu
+                                                ${isSelected
+                                                    ? 'border-violet-500 bg-violet-50/50 shadow-md ring-2 ring-violet-500/20'
+                                                    : 'border-slate-200 bg-white hover:border-violet-300 hover:shadow-lg hover:-translate-y-1'
+                                                }
+                                            `}
+                                        >
+                                            <div className="flex justify-between w-full">
+                                                <div className={`
+                                                            w-6 h-6 rounded-full flex items-center justify-center border transition-colors
+                                                            ${isSelected ? 'bg-violet-500 border-violet-500 text-white' : 'border-slate-300 bg-slate-50'}
+                                                        `}>
+                                                    {isSelected && <Check size={14} strokeWidth={3} />}
+                                                </div>
+                                                {displayPrice > 0 && (
+                                                    <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${isSelected ? 'bg-white/20' : 'bg-slate-100 text-slate-500'}`}>
+                                                        +${displayPrice}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            <div className="relative z-10 w-full">
+                                                <div className="font-bold text-base leading-tight">{opt.name}</div>
+                                            </div>
+
+                                            {/* Optional Image Background or Overlay could go here */}
+                                        </motion.div>
+                                    );
+                                })}
+                            </motion.div>
+
+                        </motion.div>
+                    </AnimatePresence>
+                </div>
+
+                {/* Bottom Controls */}
+                <div className="absolute bottom-0 left-0 w-full bg-white border-t border-slate-200 p-4 md:p-6 flex justify-between items-center z-20 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)]">
+                    <button
+                        onClick={handlePrev}
+                        disabled={currentStepIndex === 0}
+                        className={`
+w - 12 h - 12 md: w - 14 md: h - 14 rounded - full flex items - center justify - center font - bold transition - all
+                            ${currentStepIndex === 0 ? 'bg-slate-100 text-slate-300' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}
+`}
+                    >
+                        <ChevronLeft size={24} />
+                    </button>
+
+                    <div className="flex gap-1 md:gap-2">
+                        {product.steps.map((_, idx) => (
+                            <div key={idx} className={`h - 2 rounded - full transition - all ${idx === currentStepIndex ? 'bg-violet-600 w-6' : 'bg-slate-200 w-2'} `} />
+                        ))}
+                    </div>
+
+                    {currentStepIndex < product.steps.length - 1 ? (
+                        <button
+                            onClick={handleNext}
+                            disabled={!canProceed(currentStep)}
+                            className={`
+h - 12 md: h - 14 px - 6 md: px - 8 rounded - full font - bold flex items - center gap - 2 transition - all
+                                ${canProceed(currentStep)
+                                    ? 'bg-slate-900 text-white hover:bg-black shadow-lg shadow-slate-900/20'
+                                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                }
+`}
+                        >
+                            <span>Siguiente</span>
+                            <ChevronRight size={20} />
+                        </button>
+                    ) : (
+                        <button
+                            onClick={handleAddToCart}
+                            disabled={!canProceed(currentStep)}
+                            className={`
+h - 12 md: h - 14 px - 6 md: px - 8 rounded - full font - bold flex items - center gap - 2 transition - all
+                                ${canProceed(currentStep)
+                                    ? 'bg-violet-600 text-white hover:bg-violet-700 shadow-lg shadow-violet-600/30'
+                                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                }
+`}
+                        >
+                            <ShoppingBag size={20} />
+                            <span className="hidden sm:inline">Agregar al Pedido</span>
+                            <span className="sm:hidden">Agregar</span>
+                        </button>
+                    )}
                 </div>
             </div>
-        </div>
-    );
 
+            {/* RIGHT: SIDEBAR SUMMARY (Desktop) */}
+            <div className="hidden lg:flex w-[400px] bg-white border-l border-slate-100 flex-col shadow-2xl z-30">
+                <SummaryContent product={product} selections={selections} currentStepIndex={currentStepIndex} total={calculateTotal()} />
+            </div>
+
+            {/* MOBILE SUMMARY OVERLAY */}
+            <AnimatePresence>
+                {isMobileSummaryOpen && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm lg:hidden"
+                        onClick={() => setIsMobileSummaryOpen(false)}
+                    >
+                        <motion.div
+                            initial={{ y: "100%" }}
+                            animate={{ y: 0 }}
+                            exit={{ y: "100%" }}
+                            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                            className="absolute bottom-0 left-0 w-full h-[80vh] bg-white rounded-t-[2rem] shadow-2xl flex flex-col"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <div className="flex justify-between items-center p-6 border-b border-slate-100">
+                                <h3 className="font-black text-2xl text-slate-900">Resumen</h3>
+                                <button onClick={() => setIsMobileSummaryOpen(false)} className="p-2 bg-slate-100 rounded-full">
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            <SummaryContent product={product} selections={selections} currentStepIndex={currentStepIndex} total={calculateTotal()} />
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+        </div >
+    );
+}
+
+// Extracted Summary Component for reuse
+function SummaryContent({ product, selections, currentStepIndex, total }: { product: Product, selections: SelectionState, currentStepIndex: number, total: number }) {
+    return (
+        <>
+            <div className="p-8 bg-slate-50 border-b border-slate-100">
+                <h3 className="font-black text-2xl text-slate-800 mb-1">Tu Creación</h3>
+                <p className="text-slate-400 text-sm">Ingredientes seleccionados</p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-8 space-y-8">
+                {product.steps.map((step, idx) => {
+                    const stepSels = selections[step.id] || [];
+                    const isActive = idx === currentStepIndex;
+                    // Always show past steps. Show current. Don't show future empty.
+                    if (stepSels.length === 0 && !isActive && idx > currentStepIndex) return null;
+
+                    return (
+                        <div key={step.id} className={`relative pl - 8 border - l - 2 ${isActive ? 'border-violet-500' : 'border-slate-200'} pb - 2 last: border - 0 last: pb - 0`}>
+                            <div className={`absolute - left - [9px] top - 0 w - 4 h - 4 rounded - full border - 2 bg - white transition - colors ${isActive ? 'border-violet-500 scale-125' : 'border-slate-300'} `} />
+
+                            <h4 className={`text - xs font - bold uppercase tracking - widest mb - 3 ${isActive ? 'text-violet-600' : 'text-slate-400'} `}>
+                                {step.label}
+                            </h4>
+
+                            {stepSels.length > 0 ? (
+                                <div className="space-y-2">
+                                    {stepSels.map(sel => (
+                                        <div key={sel.id} className="flex justify-between items-center text-sm font-bold text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                            <span>{sel.name}</span>
+                                            {sel.price_extra > 0 && (
+                                                <span className="text-violet-600 bg-violet-50 px-2 py-0.5 rounded text-xs">+${sel.price_extra}</span>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-slate-300 italic">Sin selección aún...</p>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+
+            <div className="p-8 bg-slate-50 border-t border-slate-100">
+                <div className="flex justify-between items-end mb-2">
+                    <span className="text-sm font-bold text-slate-400 uppercase tracking-widest">Total</span>
+                    <span className="text-4xl font-black text-slate-900 tracking-tight">${total}</span>
+                </div>
+            </div>
+        </>
+    );
 }

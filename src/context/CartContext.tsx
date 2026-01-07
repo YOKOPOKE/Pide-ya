@@ -12,18 +12,25 @@ export type Ingredient = {
 
 export type OrderItem = {
     id: string; // Unique ID for cart item
-    productType: 'bowl' | 'burger';
+    productType: 'bowl' | 'burger' | 'menu';
     size?: string;
+    // Dynamic Structure for new Builder
+    details?: { label: string; value: string }[];
+    // Legacy support (optional now)
     base?: Ingredient | null;
-    proteins: Ingredient[];
-    mixins: Ingredient[];
-    sauces: Ingredient[];
-    toppings: Ingredient[];
-    extras: Ingredient[];
+    proteins?: Ingredient[];
+    mixins?: Ingredient[];
+    sauces?: Ingredient[];
+    toppings?: Ingredient[];
+    extras?: Ingredient[];
     price: number;
     quantity: number;
     name?: string; // Specific product name (e.g., "Spicy Tuna Bowl")
     image?: string;
+    priceBreakdown?: {
+        base: number;
+        extras: number;
+    };
 };
 
 type CartContextType = {
@@ -71,6 +78,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         const item: OrderItem = {
             ...newItem,
             id: Math.random().toString(36).substr(2, 9),
+            // Default legacy fields to empty to prevent undefined errors if accessed unsafely elsewhere
+            proteins: newItem.proteins || [],
+            mixins: newItem.mixins || [],
+            sauces: newItem.sauces || [],
+            toppings: newItem.toppings || [],
+            extras: newItem.extras || []
         };
         setItems(prev => [...prev, item]);
         if (openDrawer) setIsCartOpen(true);

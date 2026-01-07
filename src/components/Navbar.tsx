@@ -12,7 +12,16 @@ export default function Navbar() {
     const [activeSection, setActiveSection] = useState('inicio');
     const { toggleCart, cartCount } = useCart();
 
+    // Force scroll to top on reload
     useEffect(() => {
+        // Disable browser's default scroll restoration
+        if ('scrollRestoration' in history) {
+            history.scrollRestoration = 'manual';
+        }
+
+        // Force scroll to top
+        window.scrollTo(0, 0);
+
         const handleScroll = () => {
             setIsScrolled(window.scrollY > 20);
 

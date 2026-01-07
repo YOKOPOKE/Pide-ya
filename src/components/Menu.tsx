@@ -2,163 +2,195 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Star, Plus, ArrowRight } from "lucide-react";
-import Image from "next/image";
+import { Star, Plus, Check } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { useCart } from "@/context/CartContext";
+import confetti from "canvas-confetti";
+import { toast } from "@/components/ui/Toast";
 
-// Types
-type MenuItem = {
+// --- Types ---
+type Product = {
     id: number;
     name: string;
     description: string;
-    price: number;
-    image_url: string;
+    base_price: number;
+    type: string;
     category: string;
-    type?: string;
-    is_available: boolean;
-    stock?: number;
+    slug: string;
+    image_url: string;
+    is_active: boolean;
 };
 
-const CATEGORIES = [
-    { id: 'Signature Bowls', label: 'Pokes de la Casa' },
-    { id: 'Burgers', label: 'Sushi Burgers' },
-    { id: 'Sides', label: 'Share & Smile' },
-    { id: 'Drinks', label: 'Drinks' },
-    { id: 'Desserts', label: 'Postres' }
+// --- Config ---
+const CATEGORY_ORDER = [
+    'Pokes de la Casa',
+    'Share & Smile',
+    'Drinks',
+    'Postres'
 ];
 
+// Animation Variants
+const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+        opacity: 1,
+        transition: {
+            staggerChildren: 0.1
+        }
+    }
+};
+
+const itemVariants = {
+    hidden: { opacity: 0, y: 40, scale: 0.95 },
+    show: {
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        transition: {
+            type: "spring",
+            stiffness: 70,
+            damping: 15, // slightly bouncier than original menu
+            mass: 0.8
+        }
+    }
+} as any;
+
 export default function Menu() {
-    const [items, setItems] = useState<MenuItem[]>([]);
+    const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
-    const [addedItems, setAddedItems] = useState<Record<number, boolean>>({}); // Track added state per item
-    const [activeCategory, setActiveCategory] = useState('Signature Bowls');
+    const [activeCategory, setActiveCategory] = useState<string>("");
+
+    // UI State for "Added" feedback per item
+    const [justAdded, setJustAdded] = useState<Record<number, boolean>>({});
+
     const supabase = createClient();
-    const { addToCart, toggleCart } = useCart();
+    const { addToCart } = useCart();
 
     useEffect(() => {
         const fetchMenu = async () => {
-            const { data } = await supabase
-                .from('menu_items')
-                .select('*')
-                .eq('is_available', true)
-                .order('id');
-            if (data) {
-                setItems(data as MenuItem[]);
-            }
+            const { data } = await supabase.from('products').select('*').eq('is_active', true);
+            if (data) setProducts(data);
             setLoading(false);
         };
-
         fetchMenu();
-
-        const channel = supabase
-            .channel('menu_updates')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => fetchMenu())
-            .subscribe();
-
-        return () => { supabase.removeChannel(channel); };
     }, []);
 
-    const filteredItems = useMemo(() => {
-        return items.filter(item => {
-            const cat = (item.category || item.type || '').toLowerCase();
-            if (activeCategory === 'Signature Bowls' && cat.includes('bowl')) return true;
-            if (activeCategory === 'Burgers' && cat.includes('burger')) return true;
-            if (activeCategory === 'Sides' && (cat.includes('side') || cat.includes('entrada') || cat.includes('share'))) return true;
-            if (activeCategory === 'Drinks' && (cat.includes('drink') || cat.includes('bebida'))) return true;
-            if (activeCategory === 'Desserts' && (cat.includes('dessert') || cat.includes('postre'))) return true;
-            return false;
-        });
-    }, [items, activeCategory]);
+    // 1. Filter & Group
+    const { categories, groupedProducts } = useMemo(() => {
+        // Exclude Custom Builders (Bowls/Burgers)
+        const relevant = products.filter(p =>
+            p.category !== 'bowls' &&
+            p.category !== 'burgers' &&
+            p.type === 'other'
+        );
 
-    const handleQuickAdd = (item: MenuItem) => {
-        if (activeCategory === 'Burgers' || (item.category && item.category.toLowerCase().includes('burger')) || item.name.toLowerCase().includes('burger')) {
-            window.dispatchEvent(new CustomEvent('open-builder', { detail: { mode: 'burger' } }));
-            return;
+        const grouped = relevant.reduce((acc, p) => {
+            const cat = p.category || 'Varios';
+            if (!acc[cat]) acc[cat] = [];
+            acc[cat].push(p);
+            return acc;
+        }, {} as Record<string, Product[]>);
+
+        const sortedCats = Object.keys(grouped).sort((a, b) => {
+            const indexA = CATEGORY_ORDER.indexOf(a);
+            const indexB = CATEGORY_ORDER.indexOf(b);
+            // Put unlisted categories at the end
+            return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
+        });
+
+        return { categories: sortedCats, groupedProducts: grouped };
+    }, [products]);
+
+    // Set initial active category
+    useEffect(() => {
+        if (!activeCategory && categories.length > 0) {
+            setActiveCategory(categories[0]);
         }
+    }, [categories, activeCategory]);
+
+
+    const handleAdd = (product: Product) => {
+        const price = Number(product.base_price || 0);
 
         addToCart({
-            productType: item.category && item.category.toLowerCase().includes('burger') ? 'burger' : 'bowl',
-            size: 'regular',
-            price: item.price,
+            name: product.name,
+            productType: 'menu',
+            price: price, // Use 'price' matching OrderItem type
             quantity: 1,
-            base: null,
-            proteins: [],
-            mixins: [],
-            sauces: [],
-            toppings: [],
-            extras: [],
-            name: item.name,
-            image: item.image_url
-        }, false); // Silent add
+            details: [], // Explicitly empty for menu items
+            image: product.image_url,
+            // Add breakdown even for simple items for consistency
+            priceBreakdown: {
+                base: price,
+                extras: 0
+            }
+        }, true); // Open drawer
 
-        // Show success feedback
-        setAddedItems(prev => ({ ...prev, [item.id]: true }));
-        setTimeout(() => {
-            setAddedItems(prev => ({ ...prev, [item.id]: false }));
-        }, 2000);
+        // Visual Feedback
+        setJustAdded(prev => ({ ...prev, [product.id]: true }));
+        setTimeout(() => setJustAdded(prev => ({ ...prev, [product.id]: false })), 1500);
+
+        confetti({
+            particleCount: 30,
+            spread: 50,
+            origin: { y: 0.7 },
+            colors: ['#a78bfa', '#34d399'],
+            disableForReducedMotion: true
+        });
     };
 
-    if (loading) return (
-        <section id="menu" className="py-24 bg-gray-50/50 relative z-10 min-h-[50vh] flex items-center justify-center">
-            <div className="flex flex-col items-center gap-4">
-                <div className="w-12 h-12 rounded-full border-4 border-yoko-primary border-t-transparent animate-spin"></div>
-                <div className="text-yoko-primary font-bold text-lg animate-pulse">Cargando Menú...</div>
-            </div>
-        </section>
-    );
+    if (loading) {
+        return (
+            <section id="menu" className="py-24 bg-gray-50/50 relative z-10 min-h-[50vh] flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="w-12 h-12 rounded-full border-4 border-violet-200 border-t-violet-600 animate-spin"></div>
+                    <div className="text-violet-600 font-bold text-lg animate-pulse">Cargando Menú...</div>
+                </div>
+            </section>
+        );
+    }
+
+    // If no Menu Items exist
+    if (categories.length === 0) return null;
 
     return (
-        <section id="menu" className="py-24 bg-gray-50/30 relative z-10">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <section id="menu" className="py-24 bg-slate-50/30 relative z-10 overflow-hidden">
+            {/* Decorative Background */}
+            <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-violet-100/40 via-transparent to-transparent pointer-events-none" />
+
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
 
                 {/* Header */}
                 <div className="flex flex-col items-center text-center mb-12">
-                    <motion.span
-                        initial={{ opacity: 0, y: 10 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        className="text-yoko-accent font-bold tracking-widest uppercase text-xs mb-3 bg-red-50 px-3 py-1 rounded-full"
-                    >
-                        Ingredientes Frescos
-                    </motion.span>
-                    <motion.h2
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        className="text-4xl md:text-5xl font-serif font-bold text-yoko-dark mb-4"
-                    >
-                        Nuestro Menú
-                    </motion.h2>
-                    <motion.p
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        transition={{ delay: 0.1 }}
-                        className="text-gray-500 text-lg max-w-2xl"
-                    >
-                        Explora combinaciones únicas creadas para cada gusto.
-                    </motion.p>
+                    <span className="text-xs font-bold tracking-[0.2em] text-violet-500 uppercase mb-3 bg-violet-50 px-4 py-1.5 rounded-full border border-violet-100">
+                        Nuestra Carta
+                    </span>
+                    <h2 className="text-4xl md:text-5xl font-serif font-black text-slate-900 mb-4">
+                        Explora el Sabor
+                    </h2>
                 </div>
 
-                {/* Sliding Capsule Categories */}
-                <div className="flex justify-center mb-16">
-                    <div className="bg-white/80 backdrop-blur-md p-1.5 rounded-full shadow-lg border border-gray-100/50 inline-flex relative overflow-hidden">
-                        {CATEGORIES.map(cat => (
+                {/* Categories Nav */}
+                <div className="flex justify-center mb-12 overflow-x-auto pb-4 scrollbar-hide">
+                    <div className="bg-white/70 backdrop-blur-md p-1.5 rounded-full border border-slate-200/60 shadow-lg shadow-slate-200/50 flex gap-2">
+                        {categories.map((cat) => (
                             <button
-                                key={cat.id}
-                                onClick={() => setActiveCategory(cat.id)}
-                                className={`relative px-6 py-2.5 rounded-full text-sm font-bold transition-colors duration-200 z-10 whitespace-nowrap ${activeCategory === cat.id ? 'text-white' : 'text-gray-500 hover:text-yoko-dark'
-                                    }`}
+                                key={cat}
+                                onClick={() => setActiveCategory(cat)}
+                                className={`
+                                    px-6 py-2.5 rounded-full text-sm font-bold transition-all relative whitespace-nowrap
+                                    ${activeCategory === cat ? 'text-white' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'}
+                                `}
                             >
-                                {activeCategory === cat.id && (
+                                {activeCategory === cat && (
                                     <motion.div
                                         layoutId="activeCategory"
-                                        className="absolute inset-0 bg-yoko-dark rounded-full -z-10 shadow-md"
+                                        className="absolute inset-0 bg-slate-900 rounded-full shadow-lg"
+                                        initial={false}
                                         transition={{ type: "spring", stiffness: 300, damping: 30 }}
                                     />
                                 )}
-                                {cat.label}
+                                <span className="relative z-10">{cat}</span>
                             </button>
                         ))}
                     </div>
@@ -167,99 +199,81 @@ export default function Menu() {
                 {/* Grid */}
                 <motion.div
                     layout
-                    className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-8"
+                    variants={containerVariants}
+                    initial="hidden"
+                    whileInView="show"
+                    viewport={{ once: false, margin: "-50px" }}
+                    key={activeCategory}
+                    className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
                 >
-                    <AnimatePresence mode='popLayout'>
-                        {filteredItems.map((item, index) => (
+                    <AnimatePresence mode="popLayout">
+                        {(groupedProducts[activeCategory] || []).map((product) => (
                             <motion.div
                                 layout
-                                initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                                animate={{ opacity: 1, scale: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
-                                transition={{ duration: 0.4, delay: index * 0.05, ease: [0.23, 1, 0.32, 1] }}
-                                key={item.id}
-                                className="group bg-white rounded-2xl sm:rounded-[2rem] p-3 sm:p-5 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07)] hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)] transition-all duration-500 cursor-pointer flex flex-col relative overflow-hidden h-full transform-gpu"
-                                onClick={() => handleQuickAdd(item)}
+                                key={product.id}
+                                variants={itemVariants}
+                                className="bg-white rounded-2xl p-3 shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-100 group flex flex-col transform-gpu"
                             >
-                                {/* Image Area */}
-                                <div className="relative aspect-square w-full mb-3 sm:mb-6 rounded-xl sm:rounded-[1.5rem] overflow-hidden bg-gray-50">
-                                    {/* Popular Badge */}
-                                    {item.id < 3 && (
-                                        <div className="absolute top-2 left-2 sm:top-4 sm:left-4 z-20">
-                                            <span className="bg-white/90 backdrop-blur-md text-yoko-salmon text-[8px] sm:text-[10px] font-bold px-2 py-1 sm:px-3 sm:py-1.5 rounded-full shadow-sm flex items-center gap-1 sm:gap-1.5 ring-1 ring-black/5">
-                                                <Star size={8} className="fill-current sm:w-[10px]" /> <span className="hidden sm:inline">FAVORITO</span><span className="sm:hidden">TOP</span>
-                                            </span>
+                                {/* Card Content */}
+                                <div className="relative aspect-[4/3] mb-3 overflow-hidden rounded-xl bg-slate-100">
+                                    {product.image_url ? (
+                                        <div className="relative w-full h-full">
+                                            <img
+                                                src={product.image_url}
+                                                alt={product.name}
+                                                loading="lazy"
+                                                className="object-cover w-full h-full group-hover:scale-110 transition-transform duration-500 transform-gpu"
+                                            />
+                                            {/* Gradient overlay */}
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                                        </div>
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-slate-300">
+                                            <img src="/placeholder.png" className="opacity-50" />
                                         </div>
                                     )}
-
-                                    <Image
-                                        src={item.image_url || "/images/bowl-placeholder.png"}
-                                        alt={item.name}
-                                        fill
-                                        sizes="(max-width: 768px) 50vw, 25vw"
-                                        className="object-cover group-hover:scale-110 transition-transform duration-700 ease-in-out will-change-transform"
-                                    />
-
-                                    {/* Gradient Overlay on Hover */}
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                                    <div className="absolute top-2 right-2 bg-white/90 backdrop-blur px-2 py-0.5 rounded-full text-[10px] font-bold text-slate-900 shadow-sm">
+                                        ${product.base_price}
+                                    </div>
                                 </div>
 
-                                {/* Content */}
-                                <div className="flex-1 flex flex-col px-1 sm:px-2 pb-1 sm:pb-2">
-                                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-1 sm:mb-2 gap-1 sm:gap-4">
-                                        <h3 className="font-bold text-yoko-dark text-sm sm:text-xl leading-tight group-hover:text-yoko-primary transition-colors duration-300">
-                                            {item.name}
+                                <div className="flex-1 flex flex-col">
+                                    <div className="flex justify-between items-start mb-1">
+                                        <h3 className="font-serif font-bold text-base text-slate-900 leading-tight group-hover:text-violet-600 transition-colors line-clamp-1">
+                                            {product.name}
                                         </h3>
-                                        <span className="text-sm sm:text-lg font-black text-yoko-dark/90 shrink-0">
-                                            ${item.price}
-                                        </span>
                                     </div>
-
-                                    <p className="text-gray-500 text-xs sm:text-sm mb-3 sm:mb-6 line-clamp-2 leading-relaxed font-medium hidden sm:block">
-                                        {item.description}
+                                    <p className="text-[11px] text-slate-500 mb-4 line-clamp-2 leading-relaxed">
+                                        {product.description}
                                     </p>
 
-                                    {/* Mobile description simplified */}
-                                    <p className="text-gray-400 text-[10px] mb-3 line-clamp-1 leading-tight sm:hidden">
-                                        {item.description}
-                                    </p>
-
-                                    {/* Footer / Action */}
-                                    <div className="mt-auto flex items-center justify-between">
-                                        <motion.button
-                                            whileHover={{ scale: 1.05, backgroundColor: addedItems[item.id] ? "#10B981" : "#FF8C69", color: "#fff" }}
-                                            whileTap={{ scale: 0.95 }}
-                                            className={`w-full py-2 sm:py-3 rounded-xl sm:rounded-2xl font-bold text-xs sm:text-sm transition-all duration-300 shadow-sm flex items-center justify-center gap-1 sm:gap-2 group-hover:shadow-md
-                                                ${addedItems[item.id] ? 'bg-green-500 text-white' : 'bg-gray-50 text-yoko-dark'}`}
+                                    <div className="mt-auto">
+                                        <button
+                                            onClick={() => handleAdd(product)}
+                                            disabled={justAdded[product.id]}
+                                            className={`
+                                                w-full py-2 rounded-lg font-bold text-xs transition-all flex items-center justify-center gap-1.5 relative overflow-hidden transform-gpu
+                                                ${justAdded[product.id]
+                                                    ? 'bg-green-100 text-green-700'
+                                                    : 'bg-slate-50 text-slate-600 hover:bg-slate-900 hover:text-white hover:shadow-lg hover:shadow-slate-900/20 hover:-translate-y-0.5 active:translate-y-0'}
+                                            `}
                                         >
-                                            {addedItems[item.id] ? (
-                                                <>
-                                                    <span className="text-white">¡Agregado!</span>
-                                                </>
+                                            {justAdded[product.id] ? (
+                                                <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-1">
+                                                    <Check size={14} /> Agregado
+                                                </motion.div>
                                             ) : (
                                                 <>
-                                                    <Plus size={14} strokeWidth={3} className="text-yoko-primary group-hover:text-white transition-colors sm:w-[16px]" />
-                                                    {item.category && item.category.toLowerCase().includes('burger') ? 'Diseñar' : 'Agregar'}
+                                                    <Plus size={14} /> Agregar
                                                 </>
                                             )}
-                                        </motion.button>
+                                        </button>
                                     </div>
                                 </div>
                             </motion.div>
                         ))}
                     </AnimatePresence>
                 </motion.div>
-
-                {filteredItems.length === 0 && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="text-center py-32 text-gray-400 flex flex-col items-center"
-                    >
-                        <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mb-6 text-3xl shadow-inner">🥣</div>
-                        <p className="text-lg font-medium">No hay productos disponibles por ahora.</p>
-                    </motion.div>
-                )}
 
             </div>
         </section>

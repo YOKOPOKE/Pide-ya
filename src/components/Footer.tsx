@@ -38,8 +38,15 @@ export default function Footer() {
                         <h3 className="font-bold text-lg mb-6 text-yoko-accent uppercase tracking-widest text-xs">Contacto</h3>
                         <ul className="space-y-4 text-sm text-gray-400">
                             <li className="flex items-start gap-3">
-                                <MapPin size={16} className="mt-1 text-yoko-accent" />
-                                <span>Av. Central Sur Pte. 12, Centro,<br />30000 Comitán de Domínguez, Chis.</span>
+                                <a
+                                    href="https://maps.app.goo.gl/5zvYPaBSQ9qdVLJw7"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="group flex gap-3 hover:text-white transition-colors"
+                                >
+                                    <MapPin size={16} className="mt-1 text-yoko-accent group-hover:scale-110 transition-transform" />
+                                    <span>Yoko Poke House<br />Comitán de Domínguez, Chis.</span>
+                                </a>
                             </li>
                             <li className="flex items-center gap-3">
                                 <Phone size={16} className="text-yoko-accent" />
@@ -66,7 +73,7 @@ export default function Footer() {
                             </li>
                             <li className="flex justify-between pb-2">
                                 <span>Domingo</span>
-                                <span className="font-bold text-yoko-accent">Cerrado</span>
+                                <span className="font-bold text-white">13:00 - 22:00</span>
                             </li>
                         </ul>
                     </div>

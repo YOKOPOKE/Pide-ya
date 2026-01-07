@@ -91,7 +91,11 @@ export default function OrderFlow() {
                         transition={{ duration: 0.3 }}
                         className="w-full"
                     >
-                        <Builder key={`${builderMode}-${builderVersion}`} initialProductType={builderMode} onBack={handleBack} />
+                        <Builder
+                            key={`${builderMode}-${builderVersion}`}
+                            initialProductSlug={builderMode === 'burger' ? 'sushi-burger' : 'poke-mediano'}
+                            onBack={handleBack}
+                        />
                     </motion.div>
                 )}
             </AnimatePresence>

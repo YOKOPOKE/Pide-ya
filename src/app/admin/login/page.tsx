@@ -28,7 +28,7 @@ export default function AdminLogin() {
             setError('Credenciales inválidas');
             setLoading(false);
         } else {
-            router.push('/admin/menu');
+            router.push('/admin');
             router.refresh(); // Ensure middleware picks up new cookie
         }
     };

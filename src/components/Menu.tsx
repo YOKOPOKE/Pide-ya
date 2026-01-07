@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Star, Plus } from "lucide-react";
+import { Star, Plus, ArrowRight } from "lucide-react";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase";
 import { useCart } from "@/context/CartContext";
@@ -31,12 +31,12 @@ const CATEGORIES = [
 export default function Menu() {
     const [items, setItems] = useState<MenuItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const [addedItems, setAddedItems] = useState<Record<number, boolean>>({}); // Track added state per item
     const [activeCategory, setActiveCategory] = useState('Signature Bowls');
     const supabase = createClient();
     const { addToCart, toggleCart } = useCart();
 
     useEffect(() => {
-        // Initial Fetch
         const fetchMenu = async () => {
             const { data } = await supabase
                 .from('menu_items')
@@ -44,7 +44,6 @@ export default function Menu() {
                 .eq('is_available', true)
                 .order('id');
             if (data) {
-                console.log('Menu Data Fetched:', data);
                 setItems(data as MenuItem[]);
             }
             setLoading(false);
@@ -52,44 +51,27 @@ export default function Menu() {
 
         fetchMenu();
 
-        // Real-time Subscription
         const channel = supabase
             .channel('menu_updates')
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'menu_items'
-                },
-                (payload) => {
-                    console.log('Realtime Menu Update:', payload);
-                    fetchMenu();
-                }
-            )
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, () => fetchMenu())
             .subscribe();
 
-        return () => {
-            supabase.removeChannel(channel);
-        };
+        return () => { supabase.removeChannel(channel); };
     }, []);
 
     const filteredItems = useMemo(() => {
         return items.filter(item => {
             const cat = (item.category || item.type || '').toLowerCase();
-
             if (activeCategory === 'Signature Bowls' && cat.includes('bowl')) return true;
             if (activeCategory === 'Burgers' && cat.includes('burger')) return true;
             if (activeCategory === 'Sides' && (cat.includes('side') || cat.includes('entrada') || cat.includes('share'))) return true;
             if (activeCategory === 'Drinks' && (cat.includes('drink') || cat.includes('bebida'))) return true;
             if (activeCategory === 'Desserts' && (cat.includes('dessert') || cat.includes('postre'))) return true;
-
             return false;
         });
     }, [items, activeCategory]);
 
     const handleQuickAdd = (item: MenuItem) => {
-        // Sushi Burger Integration: Redirect to Builder
         if (activeCategory === 'Burgers' || (item.category && item.category.toLowerCase().includes('burger')) || item.name.toLowerCase().includes('burger')) {
             window.dispatchEvent(new CustomEvent('open-builder', { detail: { mode: 'burger' } }));
             return;
@@ -105,132 +87,162 @@ export default function Menu() {
             mixins: [],
             sauces: [],
             toppings: [],
-            extras: []
-        });
-        toggleCart();
+            extras: [],
+            name: item.name,
+            image: item.image_url
+        }, false); // Silent add
+
+        // Show success feedback
+        setAddedItems(prev => ({ ...prev, [item.id]: true }));
+        setTimeout(() => {
+            setAddedItems(prev => ({ ...prev, [item.id]: false }));
+        }, 2000);
     };
 
     if (loading) return (
-        <section id="menu" className="py-24 bg-white relative z-10 min-h-[50vh] flex items-center justify-center">
-            <div className="text-yoko-primary animate-pulse font-bold text-xl">Cargando Menú...</div>
+        <section id="menu" className="py-24 bg-gray-50/50 relative z-10 min-h-[50vh] flex items-center justify-center">
+            <div className="flex flex-col items-center gap-4">
+                <div className="w-12 h-12 rounded-full border-4 border-yoko-primary border-t-transparent animate-spin"></div>
+                <div className="text-yoko-primary font-bold text-lg animate-pulse">Cargando Menú...</div>
+            </div>
         </section>
     );
 
     return (
-        <section id="menu" className="py-24 bg-white relative z-10">
+        <section id="menu" className="py-24 bg-gray-50/30 relative z-10">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
                 {/* Header */}
-                <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
-                    <div>
-                        <h2 className="text-4xl md:text-5xl font-serif font-bold text-yoko-dark mb-2">
-                            Nuestro Menú
-                        </h2>
-                        <p className="text-gray-500 text-lg">Explora nuestros platillos más frescos.</p>
-                    </div>
+                <div className="flex flex-col items-center text-center mb-12">
+                    <motion.span
+                        initial={{ opacity: 0, y: 10 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        className="text-yoko-accent font-bold tracking-widest uppercase text-xs mb-3 bg-red-50 px-3 py-1 rounded-full"
+                    >
+                        Ingredientes Frescos
+                    </motion.span>
+                    <motion.h2
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        className="text-4xl md:text-5xl font-serif font-bold text-yoko-dark mb-4"
+                    >
+                        Nuestro Menú
+                    </motion.h2>
+                    <motion.p
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ delay: 0.1 }}
+                        className="text-gray-500 text-lg max-w-2xl"
+                    >
+                        Explora combinaciones únicas creadas para cada gusto.
+                    </motion.p>
+                </div>
 
-                    {/* Category Filter Pills - Mobile Optimized with Snap */}
-                    <div className="w-full md:w-auto overflow-hidden">
-                        <div className="flex overflow-x-auto pb-6 md:pb-0 gap-3 no-scrollbar items-center snap-x snap-mandatory px-1 md:px-0 -mx-4 md:mx-0 px-4 md:px-0">
-                            {CATEGORIES.map(cat => (
-                                <button
-                                    key={cat.id}
-                                    onClick={() => setActiveCategory(cat.id)}
-                                    className={`snap-center shrink-0 px-6 py-2.5 rounded-full font-bold whitespace-nowrap transition-all duration-300 text-sm md:text-base border ${activeCategory === cat.id
-                                        ? 'bg-yoko-accent text-white border-yoko-accent shadow-lg shadow-red-200/50 scale-105'
-                                        : 'bg-white text-gray-400 border-gray-100 hover:border-red-200 hover:text-yoko-accent hover:bg-red-50 hover:scale-105 active:scale-95'
-                                        }`}
-                                >
-                                    {cat.label}
-                                </button>
-                            ))}
-                        </div>
+                {/* Sliding Capsule Categories */}
+                <div className="flex justify-center mb-16">
+                    <div className="bg-white/80 backdrop-blur-md p-1.5 rounded-full shadow-lg border border-gray-100/50 inline-flex relative overflow-hidden">
+                        {CATEGORIES.map(cat => (
+                            <button
+                                key={cat.id}
+                                onClick={() => setActiveCategory(cat.id)}
+                                className={`relative px-6 py-2.5 rounded-full text-sm font-bold transition-colors duration-200 z-10 whitespace-nowrap ${activeCategory === cat.id ? 'text-white' : 'text-gray-500 hover:text-yoko-dark'
+                                    }`}
+                            >
+                                {activeCategory === cat.id && (
+                                    <motion.div
+                                        layoutId="activeCategory"
+                                        className="absolute inset-0 bg-yoko-dark rounded-full -z-10 shadow-md"
+                                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                                    />
+                                )}
+                                {cat.label}
+                            </button>
+                        ))}
                     </div>
                 </div>
 
                 {/* Grid */}
                 <motion.div
-                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
+                    layout
+                    className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-8"
                 >
-                    <AnimatePresence mode='wait'>
-                        {filteredItems.map((item) => (
+                    <AnimatePresence mode='popLayout'>
+                        {filteredItems.map((item, index) => (
                             <motion.div
                                 layout
-                                initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.9 }}
-                                whileHover={{
-                                    y: -8,
-                                    transition: { type: "spring", stiffness: 400, damping: 25 }
-                                }}
-                                transition={{ duration: 0.3 }}
+                                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+                                transition={{ duration: 0.4, delay: index * 0.05, ease: [0.23, 1, 0.32, 1] }}
                                 key={item.id}
-                                className="bg-white rounded-3xl p-4 border border-gray-100 shadow-sm hover:shadow-2xl hover:shadow-yoko-primary/10 transition-shadow duration-300 group flex flex-col h-full relative"
+                                className="group bg-white rounded-2xl sm:rounded-[2rem] p-3 sm:p-5 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07)] hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)] transition-all duration-500 cursor-pointer flex flex-col relative overflow-hidden h-full transform-gpu"
+                                onClick={() => handleQuickAdd(item)}
                             >
                                 {/* Image Area */}
-                                <div className="relative h-56 w-full mb-4 bg-gray-50 rounded-2xl overflow-hidden shadow-inner">
+                                <div className="relative aspect-square w-full mb-3 sm:mb-6 rounded-xl sm:rounded-[1.5rem] overflow-hidden bg-gray-50">
                                     {/* Popular Badge */}
                                     {item.id < 3 && (
-                                        <span className="absolute top-3 left-3 bg-white/95 backdrop-blur-md text-yoko-primary text-[10px] font-bold px-3 py-1 rounded-full shadow-lg z-10 border border-gray-100 flex items-center gap-1">
-                                            <Star size={10} className="fill-current" /> POPULAR
-                                        </span>
+                                        <div className="absolute top-2 left-2 sm:top-4 sm:left-4 z-20">
+                                            <span className="bg-white/90 backdrop-blur-md text-yoko-salmon text-[8px] sm:text-[10px] font-bold px-2 py-1 sm:px-3 sm:py-1.5 rounded-full shadow-sm flex items-center gap-1 sm:gap-1.5 ring-1 ring-black/5">
+                                                <Star size={8} className="fill-current sm:w-[10px]" /> <span className="hidden sm:inline">FAVORITO</span><span className="sm:hidden">TOP</span>
+                                            </span>
+                                        </div>
                                     )}
 
                                     <Image
-                                        key={item.image_url} // Force re-mount on URL change
                                         src={item.image_url || "/images/bowl-placeholder.png"}
                                         alt={item.name}
                                         fill
-                                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
-                                        className="object-cover group-hover:scale-105 transition-transform duration-500 will-change-transform"
+                                        sizes="(max-width: 768px) 50vw, 25vw"
+                                        className="object-cover group-hover:scale-110 transition-transform duration-700 ease-in-out will-change-transform"
                                     />
 
-                                    {/* Quick Add Overlay (Desktop Only) */}
-                                    <div className="hidden md:flex absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 items-center justify-center backdrop-blur-[2px]">
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation(); // Prevent card click
-                                                handleQuickAdd(item);
-                                            }}
-                                            className="bg-white text-yoko-accent font-bold px-6 py-3 rounded-full transform translate-y-4 group-hover:translate-y-0 transition-all duration-300 shadow-xl hover:bg-yoko-accent hover:text-white hover:scale-105 hover:shadow-2xl hover:shadow-red-200/50 active:scale-95 flex items-center gap-2"
-                                        >
-                                            <Plus size={18} />
-                                            {item.category && item.category.toLowerCase().includes('burger') ? 'Diseñar' : 'Agregar'}
-                                        </button>
-                                    </div>
+                                    {/* Gradient Overlay on Hover */}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                                 </div>
 
                                 {/* Content */}
-                                <div className="flex-1 flex flex-col">
-                                    <div className="flex justify-between items-start mb-2">
-                                        <h3 className="font-bold text-yoko-dark text-lg leading-tight group-hover:text-yoko-primary transition-colors">
+                                <div className="flex-1 flex flex-col px-1 sm:px-2 pb-1 sm:pb-2">
+                                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-1 sm:mb-2 gap-1 sm:gap-4">
+                                        <h3 className="font-bold text-yoko-dark text-sm sm:text-xl leading-tight group-hover:text-yoko-primary transition-colors duration-300">
                                             {item.name}
                                         </h3>
-                                        <span className="text-xl font-black text-yoko-accent bg-red-50 px-3 py-1 rounded-full group-hover:bg-yoko-accent group-hover:text-white transition-colors shadow-sm">
+                                        <span className="text-sm sm:text-lg font-black text-yoko-dark/90 shrink-0">
                                             ${item.price}
                                         </span>
                                     </div>
 
-                                    <p className="text-gray-400 text-xs mb-4 line-clamp-2 flex-1 leading-relaxed font-medium">
+                                    <p className="text-gray-500 text-xs sm:text-sm mb-3 sm:mb-6 line-clamp-2 leading-relaxed font-medium hidden sm:block">
                                         {item.description}
                                     </p>
 
-                                    {/* Footer Actions */}
-                                    <div className="flex items-center justify-between pt-4 border-t border-gray-50 mt-auto">
-                                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                                            <span className={`w-2 h-2 rounded-full ${item.stock && item.stock > 0 ? 'bg-green-400' : 'bg-green-400'}`}></span>
-                                            Disponible
-                                        </span>
+                                    {/* Mobile description simplified */}
+                                    <p className="text-gray-400 text-[10px] mb-3 line-clamp-1 leading-tight sm:hidden">
+                                        {item.description}
+                                    </p>
 
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleQuickAdd(item);
-                                            }}
-                                            className="bg-red-50 text-yoko-accent rounded-full p-2.5 hover:bg-yoko-accent hover:text-white transition-all shadow-sm hover:shadow-lg hover:scale-110 active:scale-90 duration-300"
+                                    {/* Footer / Action */}
+                                    <div className="mt-auto flex items-center justify-between">
+                                        <motion.button
+                                            whileHover={{ scale: 1.05, backgroundColor: addedItems[item.id] ? "#10B981" : "#FF8C69", color: "#fff" }}
+                                            whileTap={{ scale: 0.95 }}
+                                            className={`w-full py-2 sm:py-3 rounded-xl sm:rounded-2xl font-bold text-xs sm:text-sm transition-all duration-300 shadow-sm flex items-center justify-center gap-1 sm:gap-2 group-hover:shadow-md
+                                                ${addedItems[item.id] ? 'bg-green-500 text-white' : 'bg-gray-50 text-yoko-dark'}`}
                                         >
-                                            <Plus size={18} />
-                                        </button>
+                                            {addedItems[item.id] ? (
+                                                <>
+                                                    <span className="text-white">¡Agregado!</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Plus size={14} strokeWidth={3} className="text-yoko-primary group-hover:text-white transition-colors sm:w-[16px]" />
+                                                    {item.category && item.category.toLowerCase().includes('burger') ? 'Diseñar' : 'Agregar'}
+                                                </>
+                                            )}
+                                        </motion.button>
                                     </div>
                                 </div>
                             </motion.div>
@@ -239,10 +251,14 @@ export default function Menu() {
                 </motion.div>
 
                 {filteredItems.length === 0 && (
-                    <div className="text-center py-20 text-gray-400 flex flex-col items-center">
-                        <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mb-4 text-2xl">🥣</div>
-                        <p>No hay productos en esta categoría por el momento.</p>
-                    </div>
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="text-center py-32 text-gray-400 flex flex-col items-center"
+                    >
+                        <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mb-6 text-3xl shadow-inner">🥣</div>
+                        <p className="text-lg font-medium">No hay productos disponibles por ahora.</p>
+                    </motion.div>
                 )}
 
             </div>

@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Check, ShoppingBag, RotateCcw } from 'lucide-react';
+import Image from 'next/image';
+import confetti from 'canvas-confetti';
 import { useCart } from '@/context/CartContext';
 import { createClient } from '@/lib/supabase';
 
@@ -251,6 +253,12 @@ export default function Builder({ initialProductType = 'bowl', onBack }: { initi
     };
 
     const handleAddToCart = () => {
+        confetti({
+            particleCount: 100,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ['#2F5233', '#B1D8B7', '#94C973'] // Yoko Theme Colors
+        });
         addToCart({
             ...order,
             quantity: 1
@@ -414,17 +422,79 @@ export default function Builder({ initialProductType = 'bowl', onBack }: { initi
         );
     }
 
-    if (loadingRules || loadingIngredients) return <div className="h-[60vh] flex items-center justify-center text-yoko-primary font-bold animate-pulse">Cargando ingredientes frescos...</div>;
+    if (loadingRules || loadingIngredients) return (
+        <div className="max-w-7xl mx-auto my-6 lg:my-10 px-4 lg:px-0 animate-pulse">
+            <div className="flex flex-col items-center mb-8 gap-4">
+                <div className="h-10 w-64 bg-gray-200 rounded-full"></div>
+                <div className="h-10 w-48 bg-gray-200 rounded-full"></div>
+            </div>
+            <div className="bg-white h-[85vh] md:h-[80vh] min-h-[500px] flex flex-col lg:flex-row shadow-2xl rounded-3xl overflow-hidden border border-gray-100">
+                {/* Skeleton Sidebar */}
+                <div className="hidden xl:flex w-80 bg-gray-50 flex-col border-r border-gray-100 p-6 relative z-10 gap-4">
+                    <div className="flex justify-between items-center mb-4">
+                        <div className="h-6 w-24 bg-gray-200 rounded"></div>
+                        <div className="h-6 w-6 bg-gray-200 rounded-full"></div>
+                    </div>
+                    <div className="space-y-3 flex-1">
+                        {[1, 2, 3, 4].map(i => (
+                            <div key={i} className="space-y-2">
+                                <div className="h-3 w-16 bg-gray-200 rounded"></div>
+                                <div className="h-4 w-full bg-gray-200 rounded"></div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="pt-4 border-t border-gray-200">
+                        <div className="h-8 w-full bg-gray-200 rounded-xl"></div>
+                    </div>
+                </div>
+                {/* Skeleton Content */}
+                <div className="flex-1 flex flex-col relative bg-gray-50/30">
+                    <div className="p-4 md:p-8 border-b border-gray-100 bg-white">
+                        <div className="h-8 w-48 bg-gray-200 rounded mb-2"></div>
+                        <div className="h-4 w-32 bg-gray-200 rounded"></div>
+                        <div className="mt-4 h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-full w-1/4 bg-gray-200"></div>
+                        </div>
+                    </div>
+                    <div className="p-4 md:p-8 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+                            <div key={i} className="h-32 bg-white rounded-2xl border border-gray-100 p-4 flex flex-col justify-between">
+                                <div className="flex justify-between">
+                                    <div className="h-8 w-8 bg-gray-200 rounded-full"></div>
+                                    <div className="h-6 w-6 bg-gray-200 rounded-full"></div>
+                                </div>
+                                <div className="space-y-2">
+                                    <div className="h-4 w-24 bg-gray-200 rounded"></div>
+                                    <div className="h-3 w-16 bg-gray-200 rounded"></div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 
-    const containerVariants = {
-        hidden: { opacity: 0 },
-        show: {
+    // Updated sliding variants
+    const stepVariants = {
+        enter: (direction: number) => ({
+            x: direction > 0 ? 50 : -50,
+            opacity: 0,
+            scale: 0.95
+        }),
+        center: {
+            zIndex: 1,
+            x: 0,
             opacity: 1,
-            transition: {
-                staggerChildren: 0.03
-            }
+            scale: 1
         },
-        exit: { opacity: 0 }
+        exit: (direction: number) => ({
+            zIndex: 0,
+            x: direction < 0 ? 50 : -50,
+            opacity: 0,
+            scale: 0.95,
+            transition: { duration: 0.2 }
+        })
     };
 
     const itemVariants = {
@@ -550,39 +620,53 @@ export default function Builder({ initialProductType = 'bowl', onBack }: { initi
                             </div>
 
                             {/* Desktop Actions */}
-                            <div className="hidden xl:flex gap-2">
-                                <button
+                            <div className="hidden xl:flex gap-3 mt-2">
+                                <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
                                     disabled={currentStep === 0 && !onBack}
                                     onClick={() => {
                                         if (currentStep === 0 && onBack) {
                                             onBack();
                                         } else {
+                                            setDirection(-1);
                                             setCurrentStep(prev => Math.max(0, prev - 1));
                                         }
                                     }}
-                                    className={`flex-1 py-3 rounded-xl font-bold border-2 transition-colors ${currentStep === 0 && !onBack ? 'border-gray-100 text-gray-300 cursor-not-allowed' : 'border-gray-200 text-gray-500 hover:border-gray-400 hover:text-gray-700'}`}
+                                    className={`px-6 py-3.5 rounded-full font-bold transition-all duration-300 flex items-center justify-center
+                                    ${currentStep === 0 && !onBack
+                                            ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                                            : 'bg-white text-gray-600 hover:bg-gray-50 hover:text-yoko-dark border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md'}`}
                                 >
-                                    {currentStep === 0 && onBack ? 'Volver al Menú' : 'Atrás'}
-                                </button>
+                                    <ChevronLeft size={18} className="mr-1" />
+                                    {currentStep === 0 && onBack ? 'Salir' : 'Atrás'}
+                                </motion.button>
 
                                 {currentStep === STEPS.length - 1 ? (
-                                    <button
+                                    <motion.button
+                                        whileHover={{ scale: 1.05, boxShadow: "0 10px 25px -5px rgba(255, 140, 105, 0.5)" }}
+                                        whileTap={{ scale: 0.95 }}
                                         onClick={handleAddToCart}
                                         disabled={order.productType === 'burger' && order.proteins.length === 0}
-                                        className="flex-[2] bg-yoko-primary text-white py-3 rounded-xl font-bold hover:bg-opacity-90 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        className="flex-1 bg-yoko-salmon text-white py-3.5 rounded-full font-bold transition-all shadow-lg hover:shadow-yoko-salmon/40 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
-                                        <ShoppingBag size={18} /> Agregar
-                                    </button>
+                                        <ShoppingBag size={18} />
+                                        <span>Agregar al Pedido</span>
+                                    </motion.button>
                                 ) : (
-                                    <button
+                                    <motion.button
+                                        whileHover={{ scale: 1.05, boxShadow: "0 10px 25px -5px rgba(26, 26, 26, 0.4)" }}
+                                        whileTap={{ scale: 0.95 }}
                                         onClick={() => {
+                                            setDirection(1);
                                             setCurrentStep(prev => Math.min(STEPS.length - 1, prev + 1));
                                         }}
                                         disabled={order.productType === 'burger' && currentStep === 0 && order.proteins.length === 0}
-                                        className="flex-[2] bg-yoko-dark text-white py-3 rounded-xl font-bold hover:bg-opacity-90 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="flex-1 bg-yoko-dark text-white py-3.5 rounded-full font-bold transition-all shadow-lg hover:shadow-yoko-dark/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
-                                        Siguiente
-                                    </button>
+                                        <span>Siguiente Paso</span>
+                                        <ChevronRight size={18} />
+                                    </motion.button>
                                 )}
                             </div>
                         </div>
@@ -632,14 +716,19 @@ export default function Builder({ initialProductType = 'bowl', onBack }: { initi
                     </div>
 
                     {/* Scrollable Content */}
-                    <div className="flex-1 p-4 md:p-8 overflow-y-auto custom-scrollbar relative">
-                        <AnimatePresence mode="wait">
+                    <div className="flex-1 p-4 md:p-8 overflow-y-auto custom-scrollbar relative overflow-x-hidden">
+                        <AnimatePresence mode="popLayout" custom={direction} initial={false}>
                             <motion.div
                                 key={`${order.productType}-${currentStep}`}
-                                variants={containerVariants}
-                                initial="hidden"
-                                animate="show"
+                                custom={direction}
+                                variants={stepVariants}
+                                initial="enter"
+                                animate="center"
                                 exit="exit"
+                                transition={{
+                                    x: { type: "spring", stiffness: 300, damping: 30 },
+                                    opacity: { duration: 0.2 }
+                                }}
                                 className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-24 lg:pb-0"
                             >
                                 {currentScreen.key === 'size' && order.productType === 'bowl' ? (
@@ -647,26 +736,32 @@ export default function Builder({ initialProductType = 'bowl', onBack }: { initi
                                         <motion.div
                                             variants={itemVariants}
                                             key={sizeOption.id}
-                                            whileHover={{ y: -5, boxShadow: "0 20px 25px -5px rgb(0 0 0 / 0.1)" }}
-                                            whileTap={{ scale: 0.98 }}
+                                            whileHover={{
+                                                y: -5,
+                                                scale: 1.02,
+                                                boxShadow: "0 20px 30px -10px rgba(0,0,0,0.1)"
+                                            }}
+                                            whileTap={{ scale: 0.95 }}
                                             onClick={() => setOrder(prev => ({ ...prev, size: sizeOption.name === 'Chico' ? 'small' : sizeOption.name === 'Grande' ? 'large' : 'medium', sizeName: sizeOption.name, price: sizeOption.price }))}
-                                            className={`group p-6 rounded-3xl border-2 cursor-pointer transition-all duration-300 flex flex-col items-center justify-center gap-4 relative overflow-hidden bg-white
+                                            className={`group p-6 rounded-[2rem] cursor-pointer transition-all duration-300 flex flex-col items-center justify-center gap-4 relative overflow-hidden transform-gpu will-change-transform
                                             ${order.sizeName === sizeOption.name
-                                                    ? 'border-yoko-primary shadow-xl ring-4 ring-green-50'
-                                                    : 'border-transparent shadow-md hover:border-gray-200'}`}
+                                                    ? 'bg-white shadow-[0_10px_40px_-10px_rgba(255,140,105,0.4)] ring-2 ring-yoko-salmon'
+                                                    : 'bg-white shadow-sm hover:shadow-md border border-transparent hover:border-gray-100'}`}
                                         >
                                             {order.sizeName === sizeOption.name && (
-                                                <div className="absolute top-4 right-4 text-yoko-primary bg-green-100 p-1 rounded-full">
+                                                <div className="absolute top-4 right-4 text-yoko-salmon bg-red-50 p-1 rounded-full">
                                                     <Check size={16} strokeWidth={4} />
                                                 </div>
                                             )}
 
                                             {sizeOption.image_url ? (
-                                                <div className="w-32 h-32 relative transform group-hover:scale-110 transition-transform duration-500">
-                                                    <img
+                                                <div className="w-32 h-32 relative transform-gpu transition-transform duration-500 group-hover:scale-110">
+                                                    <Image
                                                         src={sizeOption.image_url}
                                                         alt={sizeOption.name}
-                                                        className="w-full h-full object-contain"
+                                                        fill
+                                                        sizes="(max-width: 768px) 100px, 150px"
+                                                        className="object-contain"
                                                         onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.classList.add('fallback-icon'); }}
                                                     />
                                                     <div className="hidden fallback-icon:block text-6xl absolute inset-0 flex items-center justify-center">🥣</div>
@@ -687,34 +782,39 @@ export default function Builder({ initialProductType = 'bowl', onBack }: { initi
                                     (currentScreen.data || menu[currentScreen.cat!] || []).map((item: any) => {
                                         const currentList = order[currentScreen.key as keyof OrderState];
                                         const isSelected = Array.isArray(currentList) ? currentList.some(i => i.id === item.id) : (currentList as Ingredient)?.id === item.id;
-                                        // Specific check for max limit reached to disable unselected items if needed? Not strictly enforcing disabled state, just visual.
 
                                         return (
                                             <motion.div
                                                 variants={itemVariants}
                                                 key={item.id}
+                                                whileHover={{ scale: 1.03, y: -2 }}
+                                                whileTap={{ scale: 0.95 }}
                                                 onClick={() => handleToggle(currentScreen.key as keyof OrderState, item)}
-                                                className={`relative p-3 rounded-2xl border transition-all duration-200 cursor-pointer flex flex-col justify-between h-32 group
+                                                className={`relative p-4 rounded-2xl transition-all duration-300 cursor-pointer flex flex-col justify-between h-36 group
                                                 ${isSelected
-                                                        ? 'bg-yoko-primary text-white border-yoko-primary shadow-lg ring-2 ring-offset-2 ring-yoko-primary/50'
-                                                        : 'bg-white border-gray-100 text-gray-500 hover:border-gray-300 hover:shadow-md'
+                                                        ? 'bg-yoko-salmon text-white shadow-[0_10px_25px_-5px_rgba(255,140,105,0.4)]'
+                                                        : 'bg-white text-gray-500 shadow-sm hover:shadow-md border border-gray-50'
                                                     }`}
                                             >
                                                 <div className="flex justify-between items-start">
-                                                    <span className={`text-3xl transform transition-transform duration-300 ${isSelected ? 'scale-110 rotate-3' : 'group-hover:scale-110'}`}>
+                                                    <span className={`text-4xl transform transition-transform duration-300 ${isSelected ? 'scale-110' : 'group-hover:scale-110'}`}>
                                                         {item.icon || '🥬'}
                                                     </span>
-                                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center border-2 transition-colors ${isSelected ? 'bg-white border-white text-yoko-primary' : 'border-gray-200 bg-transparent'}`}>
-                                                        {isSelected && <Check size={14} strokeWidth={4} />}
-                                                    </div>
+                                                    <motion.div
+                                                        initial={false}
+                                                        animate={{ scale: isSelected ? 1 : 0, opacity: isSelected ? 1 : 0 }}
+                                                        className="w-6 h-6 rounded-full bg-white text-yoko-salmon flex items-center justify-center shadow-sm"
+                                                    >
+                                                        <Check size={14} strokeWidth={4} />
+                                                    </motion.div>
                                                 </div>
 
                                                 <div>
-                                                    <h4 className={`font-bold leading-tight mb-1 line-clamp-2 ${isSelected ? 'text-white' : 'text-yoko-dark'}`}>
+                                                    <h4 className={`font-bold leading-tight mb-1 text-sm line-clamp-2 ${isSelected ? 'text-white' : 'text-yoko-dark'}`}>
                                                         {item.name}
                                                     </h4>
                                                     {item.price ? (
-                                                        <span className={`text-xs font-bold px-2 py-0.5 rounded-md inline-block ${isSelected ? 'bg-white/20 text-white' : 'bg-green-50 text-yoko-accent'}`}>
+                                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-block ${isSelected ? 'bg-white/20 text-white' : 'bg-red-50 text-yoko-accent'}`}>
                                                             +${item.price}
                                                         </span>
                                                     ) : (
@@ -732,39 +832,56 @@ export default function Builder({ initialProductType = 'bowl', onBack }: { initi
                     </div>
 
                     {/* Mobile Footer Controls (Hidden on XL) */}
-                    <div className="xl:hidden p-4 border-t border-gray-100 bg-white/95 backdrop-blur-md sticky bottom-0 z-30 flex justify-between items-center shadow-[0_-5px_20px_rgba(0,0,0,0.1)]">
-                        <button
+                    <div className="xl:hidden p-4 border-t border-gray-100 bg-white/95 backdrop-blur-xl sticky bottom-0 z-30 flex justify-between items-center gap-4 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
+                        <motion.button
+                            whileTap={{ scale: 0.9 }}
                             disabled={currentStep === 0}
-                            onClick={() => setCurrentStep(prev => Math.max(0, prev - 1))}
-                            className={`p-3 rounded-full border transition-colors ${currentStep === 0 ? 'border-gray-100 text-gray-300' : 'border-gray-200 text-gray-500'}`}
+                            onClick={() => {
+                                setDirection(-1);
+                                setCurrentStep(prev => Math.max(0, prev - 1));
+                            }}
+                            className={`p-4 rounded-full transition-all duration-300 ${currentStep === 0 ? 'bg-gray-50 text-gray-300' : 'bg-gray-100 text-yoko-dark hover:bg-gray-200'}`}
                         >
-                            <ChevronLeft size={24} />
-                        </button>
+                            <ChevronLeft size={20} />
+                        </motion.button>
 
-                        <div className="flex flex-col items-center">
-                            <span className="text-[10px] uppercase text-gray-400 font-bold tracking-wider">Total</span>
-                            <span className="font-serif font-bold text-xl text-yoko-primary">${order.price}</span>
+                        <div className="flex-1 flex flex-col items-center">
+                            <span className="text-[10px] uppercase text-gray-400 font-bold tracking-widest">Total</span>
+                            <motion.span
+                                key={order.price}
+                                initial={{ scale: 1.2 }}
+                                animate={{ scale: 1 }}
+                                className="font-serif font-black text-2xl text-yoko-primary leading-none"
+                            >
+                                ${order.price}
+                            </motion.span>
                         </div>
 
                         {currentStep === STEPS.length - 1 ? (
-                            <button
+                            <motion.button
+                                whileHover={{ scale: 1.05, boxShadow: "0 10px 25px -5px rgba(255, 140, 105, 0.5)" }}
+                                whileTap={{ scale: 0.95 }}
                                 onClick={handleAddToCart}
                                 disabled={order.productType === 'burger' && order.proteins.length === 0}
-                                className="px-6 py-3 bg-yoko-primary text-white rounded-full font-bold shadow-lg flex items-center gap-2 animate-bounce-subtle"
+                                className="px-8 py-4 bg-yoko-salmon text-white rounded-full font-bold shadow-lg shadow-yoko-salmon/30 flex items-center gap-2"
                             >
-                                <ShoppingBag size={20} /> Agregar
-                            </button>
+                                <span className="text-sm">Agregar</span> <ShoppingBag size={18} />
+                            </motion.button>
                         ) : (
-                            <button
-                                onClick={() => setCurrentStep(prev => Math.min(STEPS.length - 1, prev + 1))}
+                            <motion.button
+                                whileHover={{ scale: 1.05, boxShadow: "0 10px 25px -5px rgba(26, 26, 26, 0.4)" }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => {
+                                    setDirection(1);
+                                    setCurrentStep(prev => Math.min(STEPS.length - 1, prev + 1));
+                                }}
                                 disabled={order.productType === 'burger' && currentStep === 0 && order.proteins.length === 0}
-                                className="px-6 py-3 bg-yoko-dark text-white rounded-full font-bold shadow-lg flex items-center gap-2"
+                                className="px-8 py-4 bg-yoko-dark text-white rounded-full font-bold shadow-lg shadow-yoko-dark/30 flex items-center gap-2"
                             >
-                                Siguiente <ChevronRight size={20} />
-                            </button>
+                                <span className="text-sm">Siguiente</span> <ChevronRight size={18} />
+                            </motion.button>
                         )}
                     </div>
-
                 </div>
             </div>
         </div>

@@ -22,11 +22,13 @@ export type OrderItem = {
     extras: Ingredient[];
     price: number;
     quantity: number;
+    name?: string; // Specific product name (e.g., "Spicy Tuna Bowl")
+    image?: string;
 };
 
 type CartContextType = {
     items: OrderItem[];
-    addToCart: (item: Omit<OrderItem, 'id'>) => void;
+    addToCart: (item: Omit<OrderItem, 'id'>, openDrawer?: boolean) => void;
     removeFromCart: (id: string) => void;
     clearCart: () => void;
     isCartOpen: boolean;
@@ -65,13 +67,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         }
     }, [items, isClient]);
 
-    const addToCart = (newItem: Omit<OrderItem, 'id'>) => {
+    const addToCart = (newItem: Omit<OrderItem, 'id'>, openDrawer = true) => {
         const item: OrderItem = {
             ...newItem,
             id: Math.random().toString(36).substr(2, 9),
         };
         setItems(prev => [...prev, item]);
-        setIsCartOpen(true);
+        if (openDrawer) setIsCartOpen(true);
     };
 
     const removeFromCart = (id: string) => {

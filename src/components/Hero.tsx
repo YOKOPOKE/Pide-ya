@@ -67,12 +67,23 @@ export default function Hero() {
                         initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 1 }}
                         className="flex flex-col sm:flex-row justify-center lg:justify-start gap-4"
                     >
-                        <a href="#product-selector" className="btn-ripple bg-yoko-primary text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-yoko-dark transition shadow-xl hover:shadow-2xl hover:-translate-y-1 inline-flex items-center justify-center gap-2">
+                        <motion.a
+                            href="#product-selector"
+                            whileHover={{ scale: 1.05, y: -2 }}
+                            whileTap={{ scale: 0.95 }}
+                            className="btn-ripple bg-yoko-primary text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-yoko-dark transition-colors shadow-xl hover:shadow-2xl inline-flex items-center justify-center gap-2"
+                        >
                             <Edit className="w-5 h-5" /> Armar mi Bowl
-                        </a>
-                        <a href="https://wa.me/5219631371902" target="_blank" className="btn-ripple bg-white text-yoko-dark border-2 border-yoko-dark px-8 py-4 rounded-full font-bold text-lg hover:bg-yoko-light transition shadow-lg hover:shadow-xl hover:-translate-y-1 inline-flex items-center justify-center gap-2">
+                        </motion.a>
+                        <motion.a
+                            href="https://wa.me/5219631371902"
+                            target="_blank"
+                            whileHover={{ scale: 1.05, y: -2 }}
+                            whileTap={{ scale: 0.95 }}
+                            className="btn-ripple bg-white text-yoko-dark border-2 border-yoko-dark px-8 py-4 rounded-full font-bold text-lg hover:bg-yoko-light transition-colors shadow-lg hover:shadow-xl inline-flex items-center justify-center gap-2"
+                        >
                             <MessageCircle className="w-5 h-5" /> Pedir por WhatsApp
-                        </a>
+                        </motion.a>
                     </motion.div>
                 </div>
 

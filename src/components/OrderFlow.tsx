@@ -10,10 +10,12 @@ export default function OrderFlow() {
     const [builderMode, setBuilderMode] = useState<'bowl' | 'burger'>('bowl');
     const builderRef = useRef<HTMLDivElement>(null);
 
+    const [builderVersion, setBuilderVersion] = useState(0);
+
     const handleProductSelect = (product: string) => {
         setBuilderMode(product as 'bowl' | 'burger');
         setShowBuilder(true);
-        // Remove scroll logic, let animation handle it
+        setBuilderVersion(v => v + 1); // Force new instance
     };
 
     const handleBack = () => {
@@ -36,6 +38,7 @@ export default function OrderFlow() {
             const mode = e.detail?.mode || 'bowl';
             setBuilderMode(mode);
             setShowBuilder(true);
+            setBuilderVersion(v => v + 1); // Force reset
         };
 
         window.addEventListener('open-builder', handleOpenBuilder);
@@ -57,23 +60,41 @@ export default function OrderFlow() {
             const element = document.getElementById('order-flow');
             if (element) {
                 element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                // Reset scroll of the builder container if needed
+                window.scrollTo({ top: element.offsetTop, behavior: 'smooth' });
             }
         }
-    }, [showBuilder]);
+    }, [showBuilder, builderVersion]);
 
     console.log('OrderFlow Render:', { showBuilder, builderMode });
 
     return (
-        <div id="order-flow" className="min-h-screen bg-white transition-opacity duration-300 ease-in-out">
-            {!showBuilder ? (
-                <div className="animate-fade-in">
-                    <ProductSelector onSelect={handleProductSelect} />
-                </div>
-            ) : (
-                <div className="animate-fade-in w-full">
-                    <Builder initialProductType={builderMode} onBack={handleBack} />
-                </div>
-            )}
+        <div id="order-flow" className="min-h-screen bg-white relative overflow-hidden">
+            <AnimatePresence mode="wait">
+                {!showBuilder ? (
+                    <motion.div
+                        key="selector"
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        transition={{ duration: 0.3 }}
+                        className="w-full"
+                    >
+                        <ProductSelector onSelect={handleProductSelect} />
+                    </motion.div>
+                ) : (
+                    <motion.div
+                        key="builder"
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 20 }}
+                        transition={{ duration: 0.3 }}
+                        className="w-full"
+                    >
+                        <Builder key={`${builderMode}-${builderVersion}`} initialProductType={builderMode} onBack={handleBack} />
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

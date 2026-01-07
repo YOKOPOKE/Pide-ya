@@ -7,6 +7,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 import { toast } from '@/components/ui/Toast';
 
+export const dynamic = 'force-dynamic';
+
 const containerVariants = {
     hidden: { opacity: 0 },
     show: {

@@ -21,6 +21,8 @@ export const metadata: Metadata = {
 
 import { CartProvider } from "@/context/CartContext";
 
+import ToastContainer from "@/components/ui/Toast";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -36,6 +38,7 @@ export default function RootLayout({
           <div className="blob blob-2"></div>
         </div>
 
+        <ToastContainer />
         <CartProvider>
           {children}
         </CartProvider>

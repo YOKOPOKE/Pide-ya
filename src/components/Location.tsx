@@ -11,7 +11,7 @@ export default function Location() {
                     initial={{ opacity: 0, x: -50 }}
                     whileInView={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.6 }}
-                    viewport={{ once: true }}
+                    viewport={{ once: false, amount: 0.3 }}
                 >
                     <span className="text-yoko-accent font-bold uppercase tracking-widest text-xs lg:text-sm">
                         Visítanos
@@ -43,7 +43,7 @@ export default function Location() {
                     initial={{ opacity: 0, scale: 0.9 }}
                     whileInView={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.6 }}
-                    viewport={{ once: true }}
+                    viewport={{ once: false, amount: 0.3 }}
                     className="relative h-[400px] rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white group"
                 >
                     {/* Using Google Maps Embed for Comitan search */}

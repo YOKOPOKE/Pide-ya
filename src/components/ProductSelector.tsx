@@ -52,7 +52,8 @@ export default function ProductSelector({ onSelect }: ProductSelectorProps) {
                 <div className="text-center mb-10 md:mb-16">
                     <motion.div
                         initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: false, amount: 0.5 }}
                         transition={{ duration: 0.6 }}
                     >
                         <h2 className="text-3xl md:text-5xl lg:text-6xl font-serif font-bold text-yoko-dark mb-4 px-4 overflow-hidden">
@@ -66,7 +67,8 @@ export default function ProductSelector({ onSelect }: ProductSelectorProps) {
                     {/* Poke Bowl Card */}
                     <motion.div
                         initial={{ opacity: 0, x: -50 }}
-                        animate={{ opacity: 1, x: 0 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: false, amount: 0.3 }}
                         transition={{ delay: 0.1, type: "spring" }}
                         whileHover={{ y: -8, scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}

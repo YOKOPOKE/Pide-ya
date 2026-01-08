@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server';
-import Stripe from 'stripe';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    // apiVersion: '2025-01-27.acacia', // Using default installed version to avoid TS errors
-});
+import { getStripe } from '@/lib/stripe';
 
 export async function POST(req: Request) {
     try {
+        const stripe = getStripe();
+
         const body = await req.json();
         const { items, orderId, customerEmail } = body;
 

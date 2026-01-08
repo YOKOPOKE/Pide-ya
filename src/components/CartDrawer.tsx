@@ -2,7 +2,7 @@
 
 import { useCart } from '@/context/CartContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, X, Trash2, ArrowRight } from 'lucide-react';
+import { ShoppingBag, X, Trash2, ArrowRight, Loader2, UtensilsCrossed, Bike, CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
 import StripeCheckoutModal from './StripeCheckoutModal';
 
@@ -18,6 +18,71 @@ export default function CartDrawer() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [clientSecret, setClientSecret] = useState<string | null>(null);
     const [showExitConfirm, setShowExitConfirm] = useState(false);
+
+    // Animation State
+    const [loadingStep, setLoadingStep] = useState<'idle' | 'restaurant' | 'driver' | 'creating'>('idle');
+
+    const runOrderSequence = async (paymentMethod: 'card' | 'cash') => {
+        if (isSubmitting) return;
+        setIsSubmitting(true);
+
+        try {
+            // 1. Notify Restaurant
+            setLoadingStep('restaurant');
+            await new Promise(r => setTimeout(r, 1500));
+
+            // 2. Notify Driver
+            setLoadingStep('driver');
+            await new Promise(r => setTimeout(r, 1500));
+
+            // 3. Create Order
+            setLoadingStep('creating');
+
+            // Auto-fill address logic
+            const finalAddress = orderType === 'pickup' ? 'RECOGER EN TIENDA' : formData.address;
+
+            // Save Order
+            const { submitOrder } = await import('@/app/actions/submitOrder');
+            const result = await submitOrder({ ...formData, address: finalAddress, paymentMethod }, items, cartTotal);
+
+            if (!result.success) throw new Error(result.error);
+
+            if (paymentMethod === 'card') {
+                // Create Checkout Session
+                const response = await fetch('/api/checkout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ items, orderId: result.orderId }),
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Error del servidor: ${errorText}`);
+                }
+
+                const data = await response.json();
+                if (data.clientSecret) {
+                    setClientSecret(data.clientSecret);
+                    setLoadingStep('idle'); // Stop animation to show modal
+                    setIsSubmitting(false); // Enable interaction again (modal handles it)
+                } else {
+                    throw new Error('No se recibió el secreto de pago');
+                }
+            } else {
+                // Cash Flow Success
+                clearCart();
+                setStep('success');
+                setLoadingStep('idle');
+                setIsSubmitting(false);
+            }
+
+        } catch (err: any) {
+            console.error("Payment Error:", err);
+            alert(`⚠️ Error: ${err.message || 'Error desconocido'}`);
+            setLoadingStep('idle');
+            setIsSubmitting(false);
+        }
+    };
 
     // Apple-style spring transition
     const springTransition = {
@@ -71,6 +136,42 @@ export default function CartDrawer() {
                             }`}
                         style={{ willChange: "transform, width, max-width" }}
                     >
+                        {/* Loading Overlay */}
+                        <AnimatePresence>
+                            {loadingStep !== 'idle' && (
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    className="absolute inset-0 bg-white/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-8 text-center"
+                                >
+                                    <div className="w-20 h-20 rounded-full bg-green-50 flex items-center justify-center mb-6 relative">
+                                        <motion.div
+                                            animate={{ rotate: 360 }}
+                                            transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                                            className="absolute inset-0 rounded-full border-4 border-green-100 border-t-green-500"
+                                        />
+                                        {loadingStep === 'restaurant' && <UtensilsCrossed className="text-green-600" size={32} />}
+                                        {loadingStep === 'driver' && <Bike className="text-green-600" size={32} />}
+                                        {loadingStep === 'creating' && <CheckCircle2 className="text-green-600" size={32} />}
+                                    </div>
+
+                                    <motion.h3
+                                        key={loadingStep}
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -10 }}
+                                        className="text-xl font-bold text-yoko-dark mb-2"
+                                    >
+                                        {loadingStep === 'restaurant' && 'Notificando al Restaurante...'}
+                                        {loadingStep === 'driver' && 'Buscando Repartidor...'}
+                                        {loadingStep === 'creating' && 'Confirmando Pedido...'}
+                                    </motion.h3>
+                                    <p className="text-gray-400 text-sm">Por favor no cierres la ventana</p>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
                         {/* Header */}
                         <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-white relative z-10 shrink-0">
                             <div className="flex-1">
@@ -371,56 +472,11 @@ export default function CartDrawer() {
 
 
                                         <button
-                                            onClick={async () => {
-                                                if (isSubmitting) return;
-                                                // Prevent Stripe payment for Pickup if desired? Or allow it? 
-                                                // Assuming allowed for now, but logical address check needed.
-
-                                                setIsSubmitting(true);
-                                                try {
-                                                    // Auto-fill address for pickup to pass validation if empty
-                                                    const finalAddress = orderType === 'pickup' ? 'RECOGER EN TIENDA' : formData.address;
-
-                                                    // 1. Save Order First (Status: awaiting_payment)
-                                                    const { submitOrder } = await import('@/app/actions/submitOrder');
-                                                    const result = await submitOrder({ ...formData, address: finalAddress, paymentMethod: 'card' }, items, cartTotal);
-
-                                                    if (!result.success) throw new Error(result.error);
-
-                                                    // 2. Create Checkout Session (Embedded)
-                                                    const response = await fetch('/api/checkout', {
-                                                        method: 'POST',
-                                                        headers: { 'Content-Type': 'application/json' },
-                                                        body: JSON.stringify({
-                                                            items,
-                                                            orderId: result.orderId,
-                                                        }),
-                                                    });
-
-                                                    if (!response.ok) {
-                                                        const errorText = await response.text();
-                                                        throw new Error(`Error del servidor: ${errorText}`);
-                                                    }
-
-                                                    const data = await response.json();
-
-                                                    if (data.clientSecret) {
-                                                        setClientSecret(data.clientSecret);
-                                                        setIsSubmitting(false); // Stop loading to show modal
-                                                    } else {
-                                                        throw new Error('No se recibió el secreto de pago');
-                                                    }
-
-                                                } catch (err: any) {
-                                                    console.error("Payment Error:", err);
-                                                    alert(`⚠️ No se pudo iniciar el pago.\n\nDetalle: ${err.message || 'Error desconocido'}\n\nPor favor intenta de nuevo o elige pagar en efectivo/transferencia.`);
-                                                    setIsSubmitting(false);
-                                                }
-                                            }}
+                                            onClick={() => runOrderSequence('card')}
                                             disabled={!formData.name || (orderType === 'delivery' && !formData.address) || formData.phone.length < 10 || isSubmitting}
                                             className="w-full bg-[#635BFF] hover:bg-[#4B44CC] text-white font-bold py-4 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg active:scale-[0.98]"
                                         >
-                                            {isSubmitting ? 'Cargando...' : (
+                                            {isSubmitting ? 'Procesando...' : (
                                                 <>💳 Pagar con Tarjeta <span className="text-xs font-normal opacity-80">(Stripe)</span></>
                                             )}
                                         </button>

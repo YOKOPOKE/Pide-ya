@@ -106,7 +106,10 @@ export default function AdminOrdersPage() {
                 // Ignore if it's just created but waiting for payment
                 if (newOrder.status === 'awaiting_payment') return;
 
-                setOrders(prev => [newOrder, ...prev]);
+                setOrders(prev => {
+                    if (prev.some(o => o.id === newOrder.id)) return prev;
+                    return [newOrder, ...prev];
+                });
                 setIncomingOrder(newOrder);
                 toast.success(`🎉 Pedido nuevo: ${newOrder.customer_name}`);
             })
@@ -115,7 +118,10 @@ export default function AdminOrdersPage() {
                 const updated = payload.new as Order;
                 if (updated.status === 'pending' && payload.old.status === 'awaiting_payment') {
                     // This is a successful payment coming in!
-                    setOrders(prev => [updated, ...prev]);
+                    setOrders(prev => {
+                        if (prev.some(o => o.id === updated.id)) return prev.map(o => o.id === updated.id ? updated : o);
+                        return [updated, ...prev];
+                    });
                     setIncomingOrder(updated);
                     toast.success(`💸 Pago confirmado: ${updated.customer_name}`);
                 } else {
@@ -513,8 +519,8 @@ const OrderCardUltra = ({ order, updateStatus }: { order: Order, updateStatus: a
             <div className="mb-2">
                 {(order.payment_method === 'card') && (
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${order.payment_status === 'paid'
-                            ? 'bg-violet-100 text-violet-700 border-violet-200'
-                            : 'bg-slate-100 text-slate-500 border-slate-200'
+                        ? 'bg-violet-100 text-violet-700 border-violet-200'
+                        : 'bg-slate-100 text-slate-500 border-slate-200'
                         }`}>
                         {order.payment_status === 'paid' ? '💳 PAGADO (Stripe)' : '⏳ PAGO PENDIENTE'}
                     </span>

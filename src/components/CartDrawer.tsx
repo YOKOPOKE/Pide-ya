@@ -424,6 +424,40 @@ export default function CartDrawer() {
                                                 <>💳 Pagar con Tarjeta <span className="text-xs font-normal opacity-80">(Stripe)</span></>
                                             )}
                                         </button>
+
+                                        {/* Cash / Pickup Button */}
+                                        <button
+                                            onClick={async () => {
+                                                if (isSubmitting) return;
+                                                setIsSubmitting(true);
+                                                try {
+                                                    // Auto-fill address for pickup to pass validation if empty
+                                                    const finalAddress = orderType === 'pickup' ? 'RECOGER EN TIENDA' : formData.address;
+
+                                                    const { submitOrder } = await import('@/app/actions/submitOrder');
+                                                    // Pass 'cash' explicitly
+                                                    const result = await submitOrder({ ...formData, address: finalAddress, paymentMethod: 'cash' }, items, cartTotal);
+
+                                                    if (!result.success) throw new Error(result.error);
+
+                                                    // Success!
+                                                    clearCart();
+                                                    setStep('success');
+                                                    // Optional: Redirect to WhatsApp manually here if needed, or let the success screen do it.
+                                                    // actually submitOrder triggers the webhook notification to client.
+                                                    // We can also open a wa.me link for the user to send proof if transfer.
+
+                                                } catch (err: any) {
+                                                    console.error(err);
+                                                    alert(`Error: ${err.message}`);
+                                                    setIsSubmitting(false);
+                                                }
+                                            }}
+                                            disabled={!formData.name || (orderType === 'delivery' && !formData.address) || formData.phone.length < 10 || isSubmitting}
+                                            className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-4 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                        >
+                                            💵 Pagar al Recibir <span className="text-xs font-normal opacity-60">(Efectivo/Transfer)</span>
+                                        </button>
                                         <button onClick={() => setStep('cart')} className="w-full text-gray-500 font-bold py-2">
                                             Volver al Carrito
                                         </button>
@@ -433,8 +467,9 @@ export default function CartDrawer() {
                         )}
                     </motion.div>
                 </>
-            )}
-        </AnimatePresence>
+            )
+            }
+        </AnimatePresence >
     );
 }
 

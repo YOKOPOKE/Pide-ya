@@ -53,20 +53,35 @@ export default function AdminOrdersPage() {
             audio.loop = true;
             audioRef.current = audio;
         }
+        return () => {
+            if (audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current.currentTime = 0;
+            }
+        };
     }, []);
 
-    // Audio Logic
+    // Audio Logic Trigger
     useEffect(() => {
         const audio = audioRef.current;
         if (!audio) return;
+
+        // Play only if there is an incoming order (pending & un-acknowledged)
+        // We use a timestamp check or just the presence of incomingOrder to decide
         if (incomingOrder) {
-            audio.currentTime = 0;
-            audio.play().catch(() => { });
+            audio.play().catch((err) => console.log('Audio autoplay blocked:', err));
         } else {
             audio.pause();
             audio.currentTime = 0;
         }
     }, [incomingOrder]);
+
+    const stopAudio = () => {
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+        }
+    };
 
     const fetchOrders = async () => {
         setLoading(true);
@@ -92,14 +107,28 @@ export default function AdminOrdersPage() {
     }, []);
 
     const updateStatus = async (id: number, status: string) => {
+        // Optimistic Update
         setOrders(prev => prev.map(o => o.id === id ? { ...o, status: status as any } : o));
+
+        // If the updated order was the incoming one, verify it clears
+        if (incomingOrder?.id === id) {
+            setIncomingOrder(null);
+            stopAudio();
+        }
+
         try {
             const { error } = await supabase.from('orders').update({ status }).eq('id', id);
-            if (error) throw error;
+
+            if (error) {
+                throw error;
+            }
+
             toast.success(status === 'preparing' ? '🔥 A cocinar...' : '✅ Pedido completado');
         } catch (e) {
+            console.error(e);
+            toast.error('Error al actualizar status');
+            // Revert changes if needed or re-fetch
             fetchOrders();
-            toast.error('Error de conexión');
         }
     };
 

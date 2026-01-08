@@ -48,7 +48,7 @@ serve(async (req) => {
                                     // Combine Name + Phone because our template only has 3 variables
                                     // Variable 1 is "Customer Name"
                                     { type: "text", text: `${customerName} (${order.customer_phone || 'Sin num'})` },
-                                    { type: "text", text: `#${orderId.slice(0, 8)}` },
+                                    { type: "text", text: `#${String(orderId).slice(0, 8)}` },
                                     { type: "text", text: `$${total}` },
                                 ],
                             },

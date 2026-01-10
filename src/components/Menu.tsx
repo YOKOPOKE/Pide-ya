@@ -6,7 +6,7 @@ import { Star, Plus, Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { useCart } from "@/context/CartContext";
 import confetti from "canvas-confetti";
-import { toast } from "@/components/ui/Toast";
+
 
 // --- Types ---
 type Product = {
@@ -65,6 +65,7 @@ export default function Menu() {
 
     const supabase = createClient();
     const { addToCart } = useCart();
+
 
     useEffect(() => {
         const fetchMenu = async () => {

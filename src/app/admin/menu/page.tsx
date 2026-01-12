@@ -97,7 +97,7 @@ export default function AdminMenuPage() {
             .order('id');
 
         if (prodData) {
-            const mapped: ProductItem[] = prodData.map(p => ({
+            const mapped: ProductItem[] = prodData.map((p: any) => ({
                 id: p.id,
                 name: p.name,
                 description: p.description,

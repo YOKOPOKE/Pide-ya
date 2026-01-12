@@ -81,9 +81,9 @@ export default function AdminHub() {
                 .gte('created_at', today);
 
             if (data) {
-                const revenue = data.reduce((acc, order) => acc + (order.status !== 'cancelled' ? order.total : 0), 0);
-                const pending = data.filter(o => o.status === 'pending' || o.status === 'preparing').length;
-                const completed = data.filter(o => o.status === 'completed').length;
+                const revenue = data.reduce((acc: number, order: any) => acc + (order.status !== 'cancelled' ? order.total : 0), 0);
+                const pending = data.filter((o: any) => o.status === 'pending' || o.status === 'preparing').length;
+                const completed = data.filter((o: any) => o.status === 'completed').length;
                 setStats({ revenue, pending, completed });
             }
             setLoading(false);

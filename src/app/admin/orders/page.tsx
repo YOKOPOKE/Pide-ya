@@ -66,7 +66,7 @@ export default function AdminOrdersPage() {
         fetchOrders();
         const channel = supabase
             .channel('kitchen-ultra-v3')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, payload => {
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload: any) => {
                 const newOrder = payload.new as Order;
                 if (newOrder.status === 'awaiting_payment') return;
 
@@ -77,7 +77,7 @@ export default function AdminOrdersPage() {
                 // No toast here, AdminContext handles it
             })
             // Listen for UPDATES
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, payload => {
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload: any) => {
                 const updated = payload.new as Order;
                 if (updated.status === 'pending' && payload.old.status === 'awaiting_payment') {
                     // Stripe confirmation
@@ -89,7 +89,7 @@ export default function AdminOrdersPage() {
                     setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
                 }
             })
-            .subscribe((status) => {
+            .subscribe((status: string) => {
                 if (status === 'SUBSCRIBED') console.log('Orders List Synced');
             });
         return () => { supabase.removeChannel(channel); };

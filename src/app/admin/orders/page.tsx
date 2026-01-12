@@ -126,9 +126,9 @@ export default function AdminOrdersPage() {
     const maxSale = Math.max(...recentSales, 100);
 
     const tabs = [
-        { id: 'pending', label: 'Por Aceptar', icon: <Flame size={18} />, count: pendingCount, color: 'from-amber-500 to-orange-500' },
+        { id: 'pending', label: 'Pendientes', icon: <Flame size={18} />, count: pendingCount, color: 'from-amber-500 to-orange-500' },
         { id: 'preparing', label: 'Cocinando', icon: <ChefHat size={18} />, count: preparingCount, color: 'from-blue-500 to-indigo-500' },
-        { id: 'completed', label: 'Resumen', icon: <CheckCircle size={18} />, count: completedCount, color: 'from-green-500 to-emerald-500' },
+        { id: 'completed', label: 'Entregados', icon: <CheckCircle size={18} />, count: completedCount, color: 'from-green-500 to-emerald-500' },
     ];
 
     return (
@@ -241,73 +241,196 @@ export default function AdminOrdersPage() {
                 </div>
             </div>
 
-            {/* --- MAIN GRID --- */}
-            <div className="max-w-7xl mx-auto p-4 md:p-8 relative z-10">
+            {/* --- MAIN CONTENT --- */}
+            <div className="max-w-screen-2xl mx-auto p-4 md:p-8 relative z-10">
 
-                {/* Desktop View */}
-                <div className="hidden md:grid md:grid-cols-4 gap-6 h-[calc(100vh-160px)]">
-
-                    {/* Column 1: PENDING (Large) */}
-                    <div className="flex flex-col h-full bg-white/40 backdrop-blur-sm rounded-3xl border border-slate-200/60 overflow-hidden">
-                        <div className="p-4 bg-white/60 border-b border-slate-100 flex justify-between items-center">
-                            <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs flex items-center gap-2"><Flame size={14} className="text-amber-500" /> Por Aceptar</h3>
-                            <span className="bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded text-xs">{pendingCount}</span>
-                        </div>
-                        <div className="p-4 overflow-y-auto space-y-4 custom-scrollbar flex-1">
-                            <AnimatePresence mode='popLayout'>
-                                {orders.filter(o => o.status === 'pending').map(order => (
-                                    <OrderCardUltra key={order.id} order={order} updateStatus={updateStatus} />
-                                ))}
-                            </AnimatePresence>
-                            {pendingCount === 0 && <EmptyStateUltra />}
-                        </div>
-                    </div>
-
-                    {/* Column 2: PREPARING (Large) */}
-                    <div className="flex flex-col h-full bg-white/40 backdrop-blur-sm rounded-3xl border border-slate-200/60 overflow-hidden">
-                        <div className="p-4 bg-white/60 border-b border-slate-100 flex justify-between items-center">
-                            <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs flex items-center gap-2"><ChefHat size={14} className="text-blue-500" /> Cocinando</h3>
-                            <span className="bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded text-xs">{preparingCount}</span>
-                        </div>
-                        <div className="p-4 overflow-y-auto space-y-4 custom-scrollbar flex-1">
-                            <AnimatePresence mode='popLayout'>
-                                {orders.filter(o => o.status === 'preparing').map(order => (
-                                    <OrderCardUltra key={order.id} order={order} updateStatus={updateStatus} />
-                                ))}
-                            </AnimatePresence>
-                            {preparingCount === 0 && <EmptyStateUltra />}
-                        </div>
-                    </div>
-
-                    {/* Column 3 & 4: COMPLETED (Compact Grid, span 2) */}
-                    <div className="col-span-2 flex flex-col h-full bg-white/40 backdrop-blur-sm rounded-3xl border border-slate-200/60 overflow-hidden">
-                        <div className="p-4 bg-white/60 border-b border-slate-100 flex justify-between items-center">
-                            <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs flex items-center gap-2"><CheckCircle size={14} className="text-green-500" /> Resumen</h3>
-                            <span className="bg-green-100 text-green-700 font-bold px-2 py-0.5 rounded text-xs">{completedCount}</span>
-                        </div>
-                        <div className="p-4 overflow-y-auto custom-scrollbar flex-1">
-                            <div className="grid grid-cols-2 gap-4">
-                                <AnimatePresence mode='popLayout'>
-                                    {orders.filter(o => o.status === 'completed').map(order => (
-                                        <CompactOrderCard key={order.id} order={order} />
-                                    ))}
-                                </AnimatePresence>
-                            </div>
-                            {completedCount === 0 && <EmptyStateUltra />}
-                        </div>
+                {/* Desktop Tabs */}
+                <div className="hidden md:flex justify-start mb-6">
+                    <div className="bg-slate-100/50 p-1 rounded-2xl flex gap-1">
+                        {tabs.map(tab => {
+                            const isActive = activeTab === tab.id;
+                            return (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id as any)}
+                                    className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${isActive ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-200/50'}`}
+                                >
+                                    {tab.id === 'pending' && <Flame size={16} className={isActive ? 'text-amber-500' : ''} />}
+                                    {tab.id === 'preparing' && <ChefHat size={16} className={isActive ? 'text-blue-500' : ''} />}
+                                    {tab.id === 'completed' && <CheckCircle size={16} className={isActive ? 'text-green-500' : ''} />}
+                                    {tab.label}
+                                    {tab.count > 0 && (
+                                        <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${isActive ? 'bg-slate-100 text-slate-600' : 'bg-slate-200 text-slate-500'}`}>
+                                            {tab.count}
+                                        </span>
+                                    )}
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
 
-                {/* Mobile Layout (Standard Stack) */}
-                <div className="md:hidden space-y-4">
-                    <AnimatePresence mode='popLayout'>
-                        {orders.filter(o => o.status === activeTab).map(order => (
-                            activeTab === 'completed'
-                                ? <CompactOrderCard key={order.id} order={order} mobile />
-                                : <OrderCardUltra key={order.id} order={order} updateStatus={updateStatus} />
-                        ))}
+                {/* Desktop Content Area (Single Column based on Tab) */}
+                <div className="hidden md:block h-[calc(100vh-220px)]">
+                    <AnimatePresence mode='wait'>
+                        {/* PENDING TAB */}
+                        {activeTab === 'pending' && (
+                            <motion.div
+                                key="pending"
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 20 }}
+                                transition={{ duration: 0.2 }}
+                                className="h-full flex flex-col bg-slate-50/50 rounded-3xl border-2 border-slate-200/60 overflow-hidden shadow-sm"
+                            >
+                                <div className="p-4 bg-white border-b border-slate-100 flex justify-between items-center">
+                                    <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs flex items-center gap-2"><Flame size={14} className="text-amber-500" /> Por Aceptar</h3>
+                                    <span className="bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded text-xs">{pendingCount}</span>
+                                </div>
+                                <div className="p-6 overflow-y-auto space-y-6 custom-scrollbar flex-1 grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 content-start">
+                                    <AnimatePresence mode='popLayout'>
+                                        {orders.filter(o => o.status === 'pending').map(order => (
+                                            <div key={order.id} className="w-full">
+                                                <OrderCardUltra order={order} updateStatus={updateStatus} />
+                                            </div>
+                                        ))}
+                                    </AnimatePresence>
+                                    {pendingCount === 0 && <div className="col-span-full"><EmptyStateUltra /></div>}
+                                </div>
+                            </motion.div>
+                        )}
+
+                        {/* PREPARING TAB */}
+                        {activeTab === 'preparing' && (
+                            <motion.div
+                                key="preparing"
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 20 }}
+                                transition={{ duration: 0.2 }}
+                                className="h-full flex flex-col bg-blue-50/30 rounded-3xl border-2 border-blue-100/50 overflow-hidden shadow-sm"
+                            >
+                                <div className="p-4 bg-white border-b border-blue-100 flex justify-between items-center">
+                                    <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs flex items-center gap-2"><ChefHat size={14} className="text-blue-500" /> Cocinando</h3>
+                                    <span className="bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded text-xs">{preparingCount}</span>
+                                </div>
+                                <div className="p-6 overflow-y-auto space-y-6 custom-scrollbar flex-1 grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 content-start">
+                                    <AnimatePresence mode='popLayout'>
+                                        {orders.filter(o => o.status === 'preparing').map(order => (
+                                            <div key={order.id} className="w-full">
+                                                <OrderCardUltra order={order} updateStatus={updateStatus} />
+                                            </div>
+                                        ))}
+                                    </AnimatePresence>
+                                    {preparingCount === 0 && <div className="col-span-full"><EmptyStateUltra /></div>}
+                                </div>
+                            </motion.div>
+                        )}
+
+                        {/* COMPLETED TAB */}
+                        {activeTab === 'completed' && (
+                            <motion.div
+                                key="completed"
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 20 }}
+                                transition={{ duration: 0.2 }}
+                                className="h-full flex flex-col bg-green-50/30 rounded-3xl border-2 border-green-100/50 overflow-hidden shadow-sm"
+                            >
+                                <div className="p-4 bg-white border-b border-green-100 flex justify-between items-center">
+                                    <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs flex items-center gap-2"><CheckCircle size={14} className="text-green-500" /> Resumen</h3>
+                                    <span className="bg-green-100 text-green-700 font-bold px-2 py-0.5 rounded text-xs">{completedCount}</span>
+                                </div>
+                                <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                                        <AnimatePresence mode='popLayout'>
+                                            {orders.filter(o => o.status === 'completed').map(order => (
+                                                <CompactOrderCard key={order.id} order={order} />
+                                            ))}
+                                        </AnimatePresence>
+                                    </div>
+                                    {completedCount === 0 && <EmptyStateUltra />}
+                                </div>
+                            </motion.div>
+                        )}
                     </AnimatePresence>
-                    {orders.filter(o => o.status === activeTab).length === 0 && <EmptyStateUltra />}
+                </div>
+
+                {/* Mobile Layout (Styled Container) */}
+                <div className="md:hidden h-[calc(100vh-240px)]">
+                    <AnimatePresence mode='wait'>
+                        {/* PENDING MOBILE */}
+                        {activeTab === 'pending' && (
+                            <motion.div
+                                key="pending-mobile"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                className="h-full flex flex-col bg-slate-50/50 rounded-3xl border-2 border-slate-200/60 overflow-hidden shadow-sm"
+                            >
+                                <div className="p-4 bg-white border-b border-slate-100 flex justify-between items-center">
+                                    <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs flex items-center gap-2"><Flame size={14} className="text-amber-500" /> Pendientes</h3>
+                                    <span className="bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded text-xs">{pendingCount}</span>
+                                </div>
+                                <div className="p-4 overflow-y-auto space-y-4 custom-scrollbar flex-1">
+                                    <AnimatePresence mode='popLayout'>
+                                        {orders.filter(o => o.status === 'pending').map(order => (
+                                            <OrderCardUltra key={order.id} order={order} updateStatus={updateStatus} />
+                                        ))}
+                                    </AnimatePresence>
+                                    {pendingCount === 0 && <EmptyStateUltra />}
+                                </div>
+                            </motion.div>
+                        )}
+
+                        {/* PREPARING MOBILE */}
+                        {activeTab === 'preparing' && (
+                            <motion.div
+                                key="preparing-mobile"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                className="h-full flex flex-col bg-blue-50/30 rounded-3xl border-2 border-blue-100/50 overflow-hidden shadow-sm"
+                            >
+                                <div className="p-4 bg-white border-b border-blue-100 flex justify-between items-center">
+                                    <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs flex items-center gap-2"><ChefHat size={14} className="text-blue-500" /> Cocinando</h3>
+                                    <span className="bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded text-xs">{preparingCount}</span>
+                                </div>
+                                <div className="p-4 overflow-y-auto space-y-4 custom-scrollbar flex-1">
+                                    <AnimatePresence mode='popLayout'>
+                                        {orders.filter(o => o.status === 'preparing').map(order => (
+                                            <OrderCardUltra key={order.id} order={order} updateStatus={updateStatus} />
+                                        ))}
+                                    </AnimatePresence>
+                                    {preparingCount === 0 && <EmptyStateUltra />}
+                                </div>
+                            </motion.div>
+                        )}
+
+                        {/* COMPLETED MOBILE */}
+                        {activeTab === 'completed' && (
+                            <motion.div
+                                key="completed-mobile"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                className="h-full flex flex-col bg-green-50/30 rounded-3xl border-2 border-green-100/50 overflow-hidden shadow-sm"
+                            >
+                                <div className="p-4 bg-white border-b border-green-100 flex justify-between items-center">
+                                    <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs flex items-center gap-2"><CheckCircle size={14} className="text-green-500" /> Entregados</h3>
+                                    <span className="bg-green-100 text-green-700 font-bold px-2 py-0.5 rounded text-xs">{completedCount}</span>
+                                </div>
+                                <div className="p-4 overflow-y-auto space-y-4 custom-scrollbar flex-1">
+                                    <AnimatePresence mode='popLayout'>
+                                        {orders.filter(o => o.status === 'completed').map(order => (
+                                            <CompactOrderCard key={order.id} order={order} mobile />
+                                        ))}
+                                    </AnimatePresence>
+                                    {completedCount === 0 && <EmptyStateUltra />}
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </div>
 
             </div>

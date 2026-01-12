@@ -7,13 +7,13 @@ import Builder from "./Builder";
 
 export default function OrderFlow() {
     const [showBuilder, setShowBuilder] = useState(false);
-    const [builderMode, setBuilderMode] = useState<'bowl' | 'burger'>('bowl');
+    const [builderMode, setBuilderMode] = useState<string>('bowl');
     const builderRef = useRef<HTMLDivElement>(null);
 
     const [builderVersion, setBuilderVersion] = useState(0);
 
     const handleProductSelect = (product: string) => {
-        setBuilderMode(product as 'bowl' | 'burger');
+        setBuilderMode(product);
         setShowBuilder(true);
         setBuilderVersion(v => v + 1); // Force new instance
     };
@@ -68,6 +68,12 @@ export default function OrderFlow() {
 
     console.log('OrderFlow Render:', { showBuilder, builderMode });
 
+    // Map builderMode to slug
+    const getProductSlug = (mode: string): string => {
+        if (mode === 'burger' || mode === 'sushi-burger') return 'sushi-burger';
+        return 'poke-mediano'; // Default to poke
+    };
+
     return (
         <div id="order-flow" className="min-h-screen bg-white relative overflow-hidden">
             <AnimatePresence mode="wait">
@@ -93,7 +99,7 @@ export default function OrderFlow() {
                     >
                         <Builder
                             key={`${builderMode}-${builderVersion}`}
-                            initialProductSlug={builderMode === 'burger' ? 'sushi-burger' : 'poke-mediano'}
+                            initialProductSlug={getProductSlug(builderMode)}
                             onBack={handleBack}
                         />
                     </motion.div>

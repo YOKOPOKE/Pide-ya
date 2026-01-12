@@ -9,25 +9,25 @@ import confetti from "canvas-confetti";
 
 
 // --- Types ---
+type Category = {
+    id: number;
+    name: string;
+    slug: string;
+};
+
 type Product = {
     id: number;
     name: string;
     description: string;
     base_price: number;
     type: string;
-    category: string;
+    category_id: number | null;
     slug: string;
     image_url: string;
     is_active: boolean;
+    // Relation
+    categories?: Category;
 };
-
-// --- Config ---
-const CATEGORY_ORDER = [
-    'Pokes de la Casa',
-    'Share & Smile',
-    'Drinks',
-    'Postres'
-];
 
 // Animation Variants
 const containerVariants = {
@@ -57,6 +57,7 @@ const itemVariants = {
 
 export default function Menu() {
     const [products, setProducts] = useState<Product[]>([]);
+    const [dbCategories, setDbCategories] = useState<Category[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeCategory, setActiveCategory] = useState<string>("");
 
@@ -69,45 +70,75 @@ export default function Menu() {
 
     useEffect(() => {
         const fetchMenu = async () => {
-            const { data } = await supabase.from('products').select('*').eq('is_active', true);
-            if (data) setProducts(data);
+            setLoading(true);
+
+            // 1. Fetch Categories
+            // We verify specific categories order or just alpha
+            // Ideally we could have an 'order' column, but alpha or ID is fine for now
+            const { data: cats } = await supabase.from('categories').select('*').order('id');
+            if (cats) setDbCategories(cats);
+
+            // 2. Fetch Products with Category relation
+            const { data: prods } = await supabase
+                .from('products')
+                .select('*, categories(*)')
+                .eq('is_active', true);
+
+            if (prods) setProducts(prods as any);
+
             setLoading(false);
         };
         fetchMenu();
     }, []);
 
     // 1. Filter & Group
-    const { categories, groupedProducts } = useMemo(() => {
-        // Exclude Custom Builders (Bowls/Burgers)
+    const { categoryNames, groupedProducts } = useMemo(() => {
+        // Exclude Custom Builders (Bowls/Burgers) referenced by SLUG or Special Category
+        // We assume 'pokes' and 'burgers' slugs in categories table are the builders
         const relevant = products.filter(p =>
-            p.category !== 'bowls' &&
-            p.category !== 'burgers' &&
-            p.type === 'other'
+            p.type === 'other' // Only show 'standard' menu items, not the builder entry points if they are stored as products
         );
 
-        const grouped = relevant.reduce((acc, p) => {
-            const cat = p.category || 'Varios';
-            if (!acc[cat]) acc[cat] = [];
-            acc[cat].push(p);
-            return acc;
-        }, {} as Record<string, Product[]>);
+        const grouped: Record<string, Product[]> = {};
+        const activeCatNames: Set<string> = new Set();
 
-        const sortedCats = Object.keys(grouped).sort((a, b) => {
-            const indexA = CATEGORY_ORDER.indexOf(a);
-            const indexB = CATEGORY_ORDER.indexOf(b);
-            // Put unlisted categories at the end
-            return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
+        relevant.forEach(p => {
+            const catName = p.categories?.name || 'Varios';
+            if (!grouped[catName]) grouped[catName] = [];
+            grouped[catName].push(p);
+            activeCatNames.add(catName);
         });
 
-        return { categories: sortedCats, groupedProducts: grouped };
-    }, [products]);
+        // Sort categories based on DB order (filtered by what actually has products)
+        // We iterate over dbCategories to preserve their order (e.g. ID or Name)
+        const sortedCats: string[] = [];
+        dbCategories.forEach(c => {
+            if (activeCatNames.has(c.name)) {
+                sortedCats.push(c.name);
+            }
+        });
+
+        // Add any found names that weren't in dbCategories (fallback)
+        activeCatNames.forEach(name => {
+            if (!sortedCats.includes(name)) sortedCats.push(name);
+        });
+
+        // Put 'Varios' or fallback at end if needed
+        const variesIdx = sortedCats.indexOf('Varios');
+        if (variesIdx !== -1) {
+            sortedCats.splice(variesIdx, 1);
+            sortedCats.push('Varios');
+        }
+
+        return { categoryNames: sortedCats, groupedProducts: grouped };
+    }, [products, dbCategories]);
 
     // Set initial active category
     useEffect(() => {
-        if (!activeCategory && categories.length > 0) {
-            setActiveCategory(categories[0]);
+        if ((!activeCategory || !categoryNames.includes(activeCategory)) && categoryNames.length > 0) {
+            setActiveCategory(categoryNames[0]);
         }
-    }, [categories, activeCategory]);
+    }, [categoryNames, activeCategory]);
 
 
     const handleAdd = (product: Product) => {
@@ -152,7 +183,7 @@ export default function Menu() {
     }
 
     // If no Menu Items exist
-    if (categories.length === 0) return null;
+    if (categoryNames.length === 0) return null;
 
     return (
         <section id="menu" className="py-24 bg-slate-50/30 relative z-10 overflow-hidden">
@@ -174,7 +205,7 @@ export default function Menu() {
                 {/* Categories Nav (Desktop) */}
                 <div className="hidden md:flex justify-center mb-12 overflow-x-auto pb-4 scrollbar-hide">
                     <div className="bg-white/70 backdrop-blur-md p-1.5 rounded-full border border-slate-200/60 shadow-lg shadow-slate-200/50 flex gap-2">
-                        {categories.map((cat) => (
+                        {categoryNames.map((cat) => (
                             <button
                                 key={cat}
                                 onClick={() => setActiveCategory(cat)}
@@ -202,9 +233,9 @@ export default function Menu() {
                     <div className="flex items-center justify-between gap-4 bg-white/80 backdrop-blur-xl p-2 rounded-2xl shadow-lg shadow-violet-100/50 border border-white">
                         <button
                             onClick={() => {
-                                const idx = categories.indexOf(activeCategory);
-                                const prev = idx === 0 ? categories.length - 1 : idx - 1;
-                                setActiveCategory(categories[prev]);
+                                const idx = categoryNames.indexOf(activeCategory);
+                                const prev = idx === 0 ? categoryNames.length - 1 : idx - 1;
+                                setActiveCategory(categoryNames[prev]);
                             }}
                             className="p-3 bg-white rounded-xl shadow-sm hover:translate-x-[-2px] active:scale-95 transition-all text-violet-600"
                         >
@@ -213,7 +244,7 @@ export default function Menu() {
 
                         <div className="flex-1 flex flex-col items-center justify-center overflow-hidden">
                             <span className="text-[10px] font-bold text-violet-400 tracking-[0.2em] uppercase mb-1">
-                                Categoría {categories.indexOf(activeCategory) + 1}/{categories.length}
+                                Categoría {categoryNames.indexOf(activeCategory) + 1}/{categoryNames.length}
                             </span>
                             <AnimatePresence mode="wait">
                                 <motion.span
@@ -231,9 +262,9 @@ export default function Menu() {
 
                         <button
                             onClick={() => {
-                                const idx = categories.indexOf(activeCategory);
-                                const next = idx === categories.length - 1 ? 0 : idx + 1;
-                                setActiveCategory(categories[next]);
+                                const idx = categoryNames.indexOf(activeCategory);
+                                const next = idx === categoryNames.length - 1 ? 0 : idx + 1;
+                                setActiveCategory(categoryNames[next]);
                             }}
                             className="p-3 bg-white rounded-xl shadow-sm hover:translate-x-[2px] active:scale-95 transition-all text-violet-600"
                         >

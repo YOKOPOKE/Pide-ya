@@ -94,7 +94,7 @@ export default function CheckoutStatus({ step, className = '' }: CheckoutStatusP
                             className="absolute inset-0"
                         >
                             <h3 className="text-xl font-bold text-yoko-dark mb-1">Mandando Pedido...</h3>
-                            <p className="text-sm text-gray-400">Conectando con el servidor</p>
+                            <p className="text-sm text-gray-400">Creando orden</p>
                         </motion.div>
                     )}
 

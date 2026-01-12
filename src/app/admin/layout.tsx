@@ -60,7 +60,7 @@ function AdminLayoutContent({ children, pathname, isMobileNavOpen, setIsMobileNa
     const navItems = [
         { name: 'Menú & Productos', path: '/admin/menu', icon: <Coffee size={20} /> },
         { name: 'Pedidos', path: '/admin/orders', icon: <LayoutDashboard size={20} /> },
-        { name: 'Condiciona los pokes', path: '/admin/settings', icon: <Settings size={20} /> },
+        { name: 'Reglas de Armado', path: '/admin/builder', icon: <Settings size={20} /> }, // Changed from settings to builder, or add new
     ];
 
     return (

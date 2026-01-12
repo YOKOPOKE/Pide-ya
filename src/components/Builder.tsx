@@ -54,6 +54,7 @@ type Product = {
     name: string;
     slug: string;
     type?: string;
+    category_id: number | null;
     base_price: number;
     description?: string;
     image_url?: string;
@@ -104,14 +105,19 @@ export default function Builder({ initialProductSlug = 'poke-mediano', onBack }:
 
                 if (prodError || !prodData) throw new Error('Producto no encontrado');
 
+                console.log('🔍 Builder loaded product:', prodData.name, 'ID:', prodData.id, 'Slug:', prodData.slug);
+
                 // 2. Fetch Steps
                 const { data: stepsData, error: stepsError } = await supabase
                     .from('product_steps')
                     .select('*')
                     .eq('product_id', prodData.id)
-                    .order('order', { ascending: true });
+                    .order('step_order', { ascending: true });
 
                 if (stepsError) throw stepsError;
+
+                console.log('✅ Loaded steps for product_id', prodData.id, ':', stepsData?.length || 0, 'steps');
+                console.log('Steps data:', stepsData);
 
                 // 3. Fetch Options
                 const stepIds = stepsData.map(s => s.id);
@@ -132,7 +138,7 @@ export default function Builder({ initialProductSlug = 'poke-mediano', onBack }:
                 const stepsWithOptions = stepsData.map(step => ({
                     ...step,
                     id: Number(step.id),
-                    order: Number(step.order),
+                    order: Number(step.step_order ?? step.order ?? 0),
                     min_selections: Number(step.min_selections),
                     max_selections: step.max_selections === '' || step.max_selections === null ? null : Number(step.max_selections),
                     included_selections: Number(step.included_selections ?? 0),

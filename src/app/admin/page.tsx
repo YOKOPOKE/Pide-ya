@@ -122,9 +122,9 @@ export default function AdminHub() {
             stat: 'Inventario'
         },
         {
-            title: 'Condiciona los pokes',
-            desc: 'Reglas de armado',
-            path: '/admin/settings',
+            title: 'Reglas de Armado',
+            desc: 'Configura pasos y extras',
+            path: '/admin/builder',
             icon: <Settings size={28} />,
             gradient: 'from-[#232526] to-[#414345]',
             stat: 'Configuración'

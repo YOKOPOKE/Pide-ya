@@ -34,11 +34,60 @@ export async function POST(req: NextRequest) {
             ) {
                 const message = body.entry[0].changes[0].value.messages[0];
                 const from = message.from;
-                const text = message.text?.body;
+                const messageType = message.type;
 
-                console.log(`📩 New Message from ${from}: ${text}`);
+                console.log(`📩 New ${messageType} message from ${from}`);
 
-                // Here we could handle auto-replies or save to DB
+                // Handle text messages
+                if (messageType === 'text') {
+                    const text = message.text?.body;
+
+                    if (text) {
+                        // Import bot functions dynamically to avoid edge runtime issues
+                        const { generateResponse, saveConversation } = await import('@/lib/whatsappBot');
+                        const { sendWhatsAppText, sendWhatsAppButtons } = await import('@/lib/whatsapp');
+
+                        // Generate intelligent response
+                        const response = await generateResponse({
+                            from,
+                            text,
+                            timestamp: Date.now()
+                        });
+
+                        // Send response
+                        if (response.useButtons && response.buttons) {
+                            await sendWhatsAppButtons(from, response.text, response.buttons);
+                        } else {
+                            await sendWhatsAppText(from, response.text);
+                        }
+
+                        // Save conversation (optional tracking)
+                        await saveConversation(from, text, response.text);
+
+                        console.log(`✅ Bot responded to ${from}`);
+                    }
+                }
+
+                // Handle button clicks
+                if (messageType === 'interactive') {
+                    const buttonReply = message.interactive?.button_reply;
+
+                    if (buttonReply) {
+                        console.log(`🔘 Button clicked: ${buttonReply.title}`);
+
+                        // Treat button click as text message
+                        const { generateResponse } = await import('@/lib/whatsappBot');
+                        const { sendWhatsAppText } = await import('@/lib/whatsapp');
+
+                        const response = await generateResponse({
+                            from,
+                            text: buttonReply.title,
+                            timestamp: Date.now()
+                        });
+
+                        await sendWhatsAppText(from, response.text);
+                    }
+                }
             }
         }
 
@@ -48,3 +97,4 @@ export async function POST(req: NextRequest) {
         return new NextResponse('Internal Server Error', { status: 500 });
     }
 }
+

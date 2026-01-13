@@ -65,6 +65,13 @@ export default function BuilderPage() {
             const { data: ings } = await supabase.from('ingredients').select('id, name, premium_price').order('name');
             if (ings) setIngredients(ings);
 
+            // Load ALL steps for preview cards
+            const { data: allSteps } = await supabase
+                .from('product_steps')
+                .select('id, product_id, step_order, label, min_selections, max_selections, included_selections, price_per_extra, is_required')
+                .order('step_order');
+            if (allSteps) setSteps(allSteps);
+
             setLoading(false);
         };
         loadInitial();
@@ -279,30 +286,99 @@ export default function BuilderPage() {
                 )}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[85vh]">
+            {/* Conditional Layout: Grid when no selection, Full editor when selected */}
+            {!selectedProduct ? (
+                // Product Grid - Full Width
+                <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200/60">
+                    <div className="flex items-center justify-between mb-8">
+                        <div>
+                            <h3 className="text-2xl font-black text-slate-800">Productos</h3>
+                            <p className="text-sm text-slate-500 mt-1">Selecciona un producto para configurar sus pasos de armado</p>
+                        </div>
+                        <span className="bg-indigo-100 text-indigo-700 text-lg font-black px-4 py-2 rounded-full">{products.length}</span>
+                    </div>
 
-                {/* --- Left: Product List (Hidden on mobile if product selected) --- */}
-                <div className={`lg:col-span-1 bg-white rounded-2xl p-4 shadow-sm border border-slate-100 overflow-y-auto ${selectedProduct ? 'hidden lg:block' : 'block'}`}>
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 px-2">Productos ({products.length})</h3>
-                    <div className="space-y-2">
-                        {products.map(p => (
-                            <button
-                                key={p.id}
-                                onClick={() => setSelectedProduct(p)}
-                                className={`w-full text-left px-4 py-3 rounded-xl font-bold transition-all flex justify-between items-center ${selectedProduct?.id === p.id
-                                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200'
-                                    : 'text-slate-600 hover:bg-slate-50'
-                                    }`}
-                            >
-                                <span className="truncate">{p.name}</span>
-                                {selectedProduct?.id === p.id && <ChevronRight size={16} />}
-                            </button>
-                        ))}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {products
+                            .sort((a, b) => {
+                                // Priority: Poke and Sushi Burger first
+                                const isPriorityA = a.name.toLowerCase().includes('poke') || a.name.toLowerCase().includes('sushi burger');
+                                const isPriorityB = b.name.toLowerCase().includes('poke') || b.name.toLowerCase().includes('sushi burger');
+                                if (isPriorityA && !isPriorityB) return -1;
+                                if (!isPriorityA && isPriorityB) return 1;
+                                return a.name.localeCompare(b.name);
+                            })
+                            .map(p => {
+                                const productSteps = steps.filter(s => s.product_id === p.id).sort((a, b) => a.step_order - b.step_order);
+                                const stepCount = productSteps.length;
+
+                                // Debug logging
+                                if (p.name.toLowerCase().includes('poke')) {
+                                    console.log(`Product: ${p.name} (ID: ${p.id})`);
+                                    console.log(`Steps found:`, productSteps);
+                                    console.log(`Step count: ${stepCount}`);
+                                }
+
+                                return (
+                                    <motion.button
+                                        key={p.id}
+                                        onClick={() => setSelectedProduct(p)}
+                                        whileHover={{ scale: 1.03, y: -4 }}
+                                        whileTap={{ scale: 0.98 }}
+                                        className="group relative bg-gradient-to-br from-white to-slate-50 p-6 rounded-2xl transition-all border-2 border-slate-100 hover:border-indigo-300 hover:shadow-xl text-left"
+                                    >
+                                        {/* Decorative corner */}
+                                        <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-indigo-500/10 to-purple-500/10 rounded-bl-full rounded-tr-2xl" />
+
+                                        {/* Content */}
+                                        <div className="relative z-10">
+                                            <h4 className="text-lg font-black text-slate-800 mb-3 leading-tight group-hover:text-indigo-600 transition-colors">
+                                                {p.name}
+                                            </h4>
+
+                                            {/* Step Preview */}
+                                            {stepCount > 0 ? (
+                                                <div className="mb-4 space-y-1.5">
+                                                    {productSteps.slice(0, 3).map((step, idx) => (
+                                                        <div key={step.id} className="flex items-center gap-2 text-xs text-slate-600">
+                                                            <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-[10px]">
+                                                                {idx + 1}
+                                                            </span>
+                                                            <span className="truncate font-medium">{step.label}</span>
+                                                        </div>
+                                                    ))}
+                                                    {stepCount > 3 && (
+                                                        <div className="text-xs text-slate-400 font-medium pl-7">
+                                                            +{stepCount - 3} más...
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="mb-4 text-xs text-slate-400 italic">
+                                                    Sin pasos configurados
+                                                </div>
+                                            )}
+
+                                            <div className="flex items-center justify-between">
+                                                <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold ${stepCount > 0
+                                                    ? 'bg-green-100 text-green-700 border border-green-200'
+                                                    : 'bg-slate-100 text-slate-500 border border-slate-200'
+                                                    }`}>
+                                                    <Move size={16} />
+                                                    <span>{stepCount} {stepCount === 1 ? 'paso' : 'pasos'}</span>
+                                                </div>
+
+                                                <ChevronRight size={20} className="text-slate-400 group-hover:text-indigo-600 transition-colors" />
+                                            </div>
+                                        </div>
+                                    </motion.button>
+                                );
+                            })}
                     </div>
                 </div>
-
-                {/* --- Right: Steps Editor (Hidden on mobile if NO product selected) --- */}
-                <div className={`lg:col-span-3 flex flex-col ${!selectedProduct ? 'hidden lg:flex' : 'flex'}`}>
+            ) : (
+                // Steps Editor - Full Width
+                <div className="flex flex-col">
                     {selectedProduct ? (
                         <div className="flex flex-col h-full">
                             <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-4 sticky top-0 z-10">
@@ -607,7 +683,7 @@ export default function BuilderPage() {
                         </div>
                     )}
                 </div>
-            </div>
+            )}
         </div>
     );
 }

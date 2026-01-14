@@ -43,10 +43,11 @@ export const metadata: Metadata = {
 
 import { CartProvider } from "@/context/CartContext";
 import { ToastProvider } from "@/context/ToastContext";
+import { SplashProvider } from "@/context/SplashContext";
 
 import ToastContainer from "@/components/ui/Toast";
 
-import SplashScreen from "@/components/SplashScreen";
+import SplashScreen from "@/components/SplashScreen"; // Keep this import
 
 export default function RootLayout({
   children,
@@ -63,12 +64,15 @@ export default function RootLayout({
           <div className="blob blob-2"></div>
         </div>
 
-        <ToastProvider>
-          <ToastContainer />
-          <CartProvider>
-            {children}
-          </CartProvider>
-        </ToastProvider>
+        <SplashProvider>
+          <ToastProvider>
+            <SplashScreen />
+            <ToastContainer />
+            <CartProvider>
+              {children}
+            </CartProvider>
+          </ToastProvider>
+        </SplashProvider>
       </body>
     </html>
   );

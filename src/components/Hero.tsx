@@ -3,24 +3,17 @@
 import { motion } from "framer-motion";
 import { Edit, MessageCircle, Star } from "lucide-react";
 import Image from "next/image";
+import { useSplash } from "@/context/SplashContext";
 
 export default function Hero() {
+    const { isComplete } = useSplash();
+
     return (
         <section
             id="inicio"
             className="relative pt-32 pb-20 px-4 min-h-[95vh] lg:min-h-screen flex items-center overflow-hidden"
         >
-            {/* Background Pattern */}
-            <div className="absolute inset-0 bg-hero-pattern opacity-5 z-0"></div>
-
-            {/* Background Glow */}
-            <div className="absolute top-0 right-0 w-[500px] lg:w-[800px] h-[500px] lg:h-[800px] bg-green-100/50 rounded-full blur-[80px] lg:blur-[100px] opacity-40 -translate-y-1/2 translate-x-1/2 z-0 animate-pulse"></div>
-
-            {/* Parallax Elements (Simplified CSS animation for now, could be mouse-aware) */}
-            <div className="absolute top-20 left-10 text-4xl opacity-20 hidden lg:block animate-float" style={{ animationDelay: '0s' }}>🥗</div>
-            <div className="absolute bottom-40 left-1/4 text-6xl opacity-10 hidden lg:block text-yoko-primary animate-float" style={{ animationDelay: '1s' }}>🌿</div>
-            <div className="absolute top-1/3 right-10 text-3xl opacity-20 hidden lg:block animate-float" style={{ animationDelay: '2s' }}>🥑</div>
-
+            {/* ... */}
             <div className="max-w-7xl mx-auto w-full flex flex-col lg:grid lg:grid-cols-12 gap-8 lg:gap-16 items-center relative z-10 pt-10 lg:pt-0">
 
                 {/* Text Content */}
@@ -28,7 +21,7 @@ export default function Hero() {
 
                     <motion.span
                         initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
+                        animate={isComplete ? { opacity: 1, y: 0 } : {}}
                         viewport={{ once: true }}
                         transition={{ delay: 0.2, duration: 0.5 }}
                         className="inline-block py-1 px-3 rounded-full bg-orange-100 text-yoko-accent text-xs font-bold uppercase tracking-widest mb-4 w-fit"
@@ -37,33 +30,32 @@ export default function Hero() {
                     </motion.span>
 
                     <h1 className="text-5xl lg:text-8xl font-serif font-bold text-yoko-dark mb-4 leading-tight">
-                        <motion.span
-                            initial={{ opacity: 0, x: -20 }}
-                            whileInView={{ opacity: 1, x: 0 }}
-                            viewport={{ once: false }}
-                            transition={{ delay: 0.4 }}
-                            className="block"
-                        >
-                            YOKO
-                        </motion.span>
-                        <motion.span
-                            initial={{ opacity: 0, x: -20 }}
-                            whileInView={{ opacity: 1, x: 0 }}
-                            viewport={{ once: false }}
-                            transition={{ delay: 0.5 }}
-                            className="block"
-                        >
-                            POKE
-                        </motion.span>
-                        <motion.span
-                            initial={{ opacity: 0, x: -20 }}
-                            whileInView={{ opacity: 1, x: 0 }}
-                            viewport={{ once: false }}
-                            transition={{ delay: 0.6 }}
-                            className="block text-yoko-accent"
-                        >
-                            HOUSE
-                        </motion.span>
+                        {[
+                            { text: "YOKO", delay: 0 },
+                            { text: "POKE", delay: 0.1 },
+                            { text: "HOUSE", delay: 0.2, color: "text-yoko-accent" }
+                        ].map((word, wordIdx) => (
+                            <span key={wordIdx} className={`block ${word.color || ""}`}>
+                                {word.text.split("").map((char, charIdx) => (
+                                    <motion.span
+                                        key={charIdx}
+                                        initial={{ opacity: 0, y: 30, filter: "blur(10px)" }}
+                                        animate={isComplete ? { opacity: 1, y: 0, filter: "blur(0px)" } : {}}
+                                        viewport={{ once: true }}
+                                        transition={{
+                                            duration: 0.8,
+                                            delay: wordIdx === 0 ? word.delay + (charIdx * 0.05) : 0.4 + word.delay + (charIdx * 0.05),
+                                            type: "spring",
+                                            stiffness: 100,
+                                            damping: 20
+                                        }}
+                                        className="inline-block"
+                                    >
+                                        {char}
+                                    </motion.span>
+                                ))}
+                            </span>
+                        ))}
                     </h1>
 
                     <motion.p

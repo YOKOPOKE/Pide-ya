@@ -49,7 +49,7 @@ type Option = {
     image_url?: string;
 };
 
-export default function AdminSettingsPage() {
+export default function AdminMenuPage() {
     const supabase = createClient();
 
     // --- State ---

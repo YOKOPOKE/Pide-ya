@@ -98,7 +98,7 @@ export default function AdminHub() {
 
             if (data) {
                 console.log('✅ Today\'s orders:', data.length, 'orders found');
-                console.log('📊 Orders:', data.map(o => ({ created: o.created_at, status: o.status, total: o.total })));
+                console.log('📊 Orders:', data.map((o: any) => ({ created: o.created_at, status: o.status, total: o.total })));
                 const revenue = data.reduce((acc: number, order: any) => acc + (order.status !== 'cancelled' && order.status !== 'awaiting_payment' ? order.total : 0), 0);
                 const pending = data.filter((o: any) => o.status === 'pending' || o.status === 'preparing').length;
                 const completed = data.filter((o: any) => o.status === 'completed').length;

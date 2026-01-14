@@ -134,7 +134,7 @@ function AdminLayoutContent({ children, pathname, isMobileNavOpen, setIsMobileNa
             </aside>
 
             {/* Mobile Header */}
-            <div className="md:hidden fixed top-0 w-full bg-white z-20 border-b border-gray-100 px-4 h-16 flex items-center justify-between text-yoko-dark shadow-sm">
+            <div className="md:hidden fixed top-0 w-full bg-white z-[60] border-b border-gray-100 px-4 h-16 flex items-center justify-between text-yoko-dark shadow-sm">
                 <span className="font-bold text-lg tracking-wide">YOKO ADMIN</span>
                 <button onClick={() => setIsMobileNavOpen(!isMobileNavOpen)} className="p-2 active:scale-95 transition text-yoko-primary">
                     {isMobileNavOpen ? <X /> : <MenuIcon />}
@@ -148,7 +148,7 @@ function AdminLayoutContent({ children, pathname, isMobileNavOpen, setIsMobileNa
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-white z-10 pt-20 px-6 space-y-4 md:hidden text-yoko-dark"
+                        className="fixed inset-0 bg-white z-[50] pt-20 px-6 space-y-4 md:hidden text-yoko-dark"
                     >
                         {navItems.map(item => (
                             <Link

@@ -249,7 +249,7 @@ export default function AdminMenuPage() {
         <div className="min-h-screen bg-slate-50/50 p-4 md:p-10 pb-32">
             <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                 <div>
-                    <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight mb-2">Arquitecto de Menú</h1>
+                    <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight mb-2">EDITA TUS PRODUCTOS</h1>
                     <p className="text-slate-500 font-medium text-sm md:text-base">Gestiona todo el menú: Pokes, Burgers y más.</p>
                 </div>
             </header>

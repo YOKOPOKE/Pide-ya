@@ -64,10 +64,10 @@ function AdminLayoutContent({ children, pathname, isMobileNavOpen, setIsMobileNa
     ];
 
     return (
-        <div className="min-h-screen bg-gray-50 flex font-sans text-yoko-dark">
+        <div className="min-h-screen bg-[#F8FAFC] flex font-sans text-slate-900">
             <IncomingOrderModal />
             {/* Sidebar Desktop */}
-            <aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-100 fixed h-full z-20 shadow-lg">
+            <aside className="hidden md:flex flex-col w-72 bg-white border-r border-slate-100 fixed h-full z-20 shadow-sm">
                 <div className="p-6 border-b border-gray-50 flex items-center gap-3">
                     <div className="w-11 h-11 bg-gradient-to-br from-yoko-primary via-rose-500 to-orange-500 rounded-2xl flex items-center justify-center text-white font-serif font-black text-2xl shadow-xl shadow-yoko-primary/40">
                         <span className="drop-shadow-md">Y</span>
@@ -184,7 +184,7 @@ function AdminLayoutContent({ children, pathname, isMobileNavOpen, setIsMobileNa
             </AnimatePresence>
 
             {/* Main Content */}
-            <main className="flex-1 md:ml-64 p-6 pt-24 md:pt-6 relative">
+            <main className="flex-1 md:ml-72 p-4 md:p-8 pt-20 md:pt-8 relative overflow-x-hidden">
                 {/* Global Audio Test Button (Visible on mobile/desktop for enabling audio context) */}
                 <div className="absolute top-4 right-4 z-50 md:hidden">
                     <button onClick={testAudio} className="p-2 bg-white rounded-full shadow-sm text-gray-400 hover:text-yoko-primary"><Volume2 size={20} /></button>

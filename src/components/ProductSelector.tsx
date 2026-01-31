@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { createClient } from "@/lib/supabase";
 import { ShoppingBag, Plus, ChefHat } from "lucide-react";
 import { useCart } from "@/context/CartContext";
+import { useToast } from "@/context/ToastContext";
 import confetti from "canvas-confetti";
 import Image from "next/image";
 import { TiltCard } from "@/components/ui/TiltCard";
@@ -22,6 +23,7 @@ type Product = {
     category: string;
     slug: string;
     image_url: string;
+    is_active: boolean; // Add is_active type
 };
 
 // Order for fixed menu
@@ -63,14 +65,32 @@ export default function ProductSelector({ onSelect }: ProductSelectorProps) {
     const [loading, setLoading] = useState(true);
     const supabase = createClient();
     const { addToCart } = useCart();
+    const { showToast } = useToast();
 
     useEffect(() => {
         const fetchMenu = async () => {
-            const { data } = await supabase.from('products').select('*').eq('is_active', true);
+            const { data } = await supabase.from('products').select('*'); // Fetch ALL to show disabled
             if (data) setProducts(data);
             setLoading(false);
         };
+
         fetchMenu();
+
+        // Realtime Subscription
+        const channel = supabase.channel('product-selector-updates')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'products' },
+                () => {
+                    console.log('🔄 Update received, refreshing menu...');
+                    fetchMenu();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     // 1. Extract Heroes (Custom Builders)
@@ -93,11 +113,19 @@ export default function ProductSelector({ onSelect }: ProductSelectorProps) {
         return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
     });
 
-    const handleBuilderSelect = (slug: string) => {
-        if (onSelect) onSelect(slug);
+    const handleBuilderSelect = (product: Product) => {
+        if (!product.is_active) {
+            showToast('🚫 Producto no disponible por el momento.', 'error');
+            return;
+        }
+        if (onSelect) onSelect(product.slug);
     };
 
     const handleQuickAdd = (product: Product) => {
+        if (!product.is_active) {
+            showToast('🚫 Producto no disponible por el momento.', 'error');
+            return;
+        }
         const price = Number(product.base_price || 0);
 
         addToCart({
@@ -150,64 +178,57 @@ export default function ProductSelector({ onSelect }: ProductSelectorProps) {
                         </p>
                     </motion.div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
+                        {customBowls.map((product) => {
+                            const emoji = '🥗';
+                            const actionText = 'Armar Bowl';
 
-                        {/* CUSTOM BOWL CARD */}
-                        <motion.div variants={itemVariants}>
-                            <TiltCard
-                                onClick={() => handleBuilderSelect('poke-mediano')}
-                                className="bg-white rounded-[2.5rem] p-8 shadow-xl shadow-slate-200 border border-slate-100 overflow-hidden"
-                            >
-                                <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-green-50 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500" />
-
-                                <div className="relative z-10 flex flex-col items-center">
-                                    <motion.span
-                                        className="text-8xl mb-6 block pb-4"
-                                        whileHover={{ rotate: 15, scale: 1.15 }}
-                                        transition={{ type: "spring", stiffness: 200 }}
+                            return (
+                                <motion.div key={product.id} variants={itemVariants}>
+                                    <TiltCard
+                                        onClick={() => handleBuilderSelect(product)}
+                                        className={`bg-white rounded-[2.5rem] p-8 shadow-xl shadow-slate-200 border border-slate-100 overflow-hidden h-full flex flex-col justify-between ${!product.is_active ? 'opacity-60 grayscale' : ''}`}
                                     >
-                                        🥗
-                                    </motion.span>
-                                    <h3 className="text-3xl font-black text-slate-800 mb-2">Poke Bowl</h3>
-                                    <p className="text-slate-500 font-medium mb-6">Base de arroz + Proteína + Toppings ilimitados</p>
+                                        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-green-50 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500" />
 
-                                    <button className="bg-slate-900 text-white px-8 py-3 rounded-full font-bold flex items-center gap-2 group-hover:bg-green-600 transition-colors shadow-lg shadow-slate-900/20 group-hover:shadow-green-600/30">
-                                        <ChefHat size={20} /> Armar Bowl
-                                    </button>
-                                </div>
-                            </TiltCard>
-                        </motion.div>
+                                        <div className="relative z-10 flex flex-col items-center flex-1">
+                                            <motion.span
+                                                className="text-8xl mb-6 block pb-4"
+                                                whileHover={{ rotate: 15, scale: 1.15 }}
+                                                transition={{ type: "spring", stiffness: 200 }}
+                                            >
+                                                {emoji}
+                                            </motion.span>
+                                            <h3 className="text-3xl font-black text-slate-800 mb-2 text-center leading-tight">{product.name}</h3>
+                                            <p className="text-slate-500 font-medium mb-6 text-center">{product.description || 'Base de arroz + Proteína + Toppings ilimitados'}</p>
 
-                        {/* CUSTOM BURGER CARD */}
-                        <motion.div variants={itemVariants}>
-                            <TiltCard
-                                onClick={() => handleBuilderSelect('sushi-burger')}
-                                className="bg-white rounded-[2.5rem] p-8 shadow-xl shadow-slate-200 border border-slate-100 overflow-hidden"
-                            >
-                                <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-orange-50 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500" />
+                                            {!product.is_active && (
+                                                <div className="mb-4 px-3 py-1 bg-slate-100 text-slate-500 text-xs font-bold uppercase rounded-full">
+                                                    No disponible
+                                                </div>
+                                            )}
 
-                                <div className="relative z-10 flex flex-col items-center">
-                                    <motion.span
-                                        className="text-8xl mb-6 block pb-4"
-                                        whileHover={{ rotate: -15, scale: 1.15 }}
-                                        transition={{ type: "spring", stiffness: 200 }}
-                                    >
-                                        🍔
-                                    </motion.span>
-                                    <h3 className="text-3xl font-black text-slate-800 mb-2">Sushi Burger</h3>
-                                    <p className="text-slate-500 font-medium mb-6">Hamburguesa de Arroz + Proteína + Salsas</p>
-
-                                    <button className="bg-slate-900 text-white px-8 py-3 rounded-full font-bold flex items-center gap-2 group-hover:bg-orange-600 transition-colors shadow-lg shadow-slate-900/20 group-hover:shadow-orange-600/30">
-                                        <ChefHat size={20} /> Armar Burger
-                                    </button>
-                                </div>
-                            </TiltCard>
-                        </motion.div>
-
+                                            <div className="mt-auto">
+                                                <button className={`bg-slate-900 text-white px-8 py-3 rounded-full font-bold flex items-center gap-2 transition-colors shadow-lg shadow-slate-900/20 ${product.is_active ? 'group-hover:bg-green-600 group-hover:shadow-green-600/30' : 'bg-slate-400 cursor-not-allowed'}`}>
+                                                    <ChefHat size={20} /> {actionText}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </TiltCard>
+                                </motion.div>
+                            );
+                        })}
                     </div>
 
+                    {/* Fallback if no builders found */}
+                    {customBowls.length === 0 && !loading && (
+                        <div className="text-center text-slate-400 py-12">
+                            <p>No hay pokes personalizables disponibles en este momento.</p>
+                        </div>
+                    )}
+
                     {/* Extra message for sizes if needed */}
-                    <div className="mt-8 flex justify-center gap-4 text-sm font-bold text-slate-400 uppercase tracking-widest opacity-60">
+                    <div className="mt-8 flex justify-center gap-4 text-sm font-bold text-slate-400 uppercase tracking-widest opacity-60 flex-wrap">
                         {customBowls.map(p => (
                             <span key={p.id}>• {p.name} ${p.base_price}</span>
                         ))}

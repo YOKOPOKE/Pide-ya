@@ -15,52 +15,59 @@ serve(async (req) => {
         const order = payload.record;
         const oldRecord = payload.old_record;
 
-        if (!order) {
-            return new Response("No record found", { status: 400 });
+        if (!order || !oldRecord) {
+            return new Response("Update requires old and new record", { status: 200 });
         }
 
-        // 🧠 SMART LOGIC 🧠
+        // 🧠 STATUS CHANGE LOGIC 🧠
 
-        // 1. If it's waiting for payment, DO NOT annoy the customer yet.
-        if (order.status === 'awaiting_payment') {
-            console.log("⏸️ Order waiting for payment. Skipping notification.");
-            return new Response("Skipped: Awaiting Payment", { status: 200 });
+        const oldStatus = oldRecord.status;
+        const newStatus = order.status;
+        const deliveryMethod = order.delivery_method;
+
+        // SKIP if status didn't change
+        if (oldStatus === newStatus) {
+            return new Response("No status change", { status: 200 });
         }
 
-        // 2. Determine if we should send message
-        // - Send if it's a NEW Cash order (INSERT + pending)
-        // - Send if it's a PAID Update (Update: awaiting_payment -> pending)
-        // - Skip if it's just a random update (e.g. preparing -> completed)
+        let message = "";
 
-        const isNewCashOrder = payload.type === 'INSERT' && order.status === 'pending';
-        const isPaymentConfirmed = payload.type === 'UPDATE'
-            && oldRecord?.status === 'awaiting_payment'
-            && order.status === 'pending';
+        // 1. ACCEPTED (pending -> preparing)
+        if (oldStatus === 'pending' && newStatus === 'preparing') {
+            message = "👨‍🍳 *EN PREPARACIÓN:* Su orden ha sido confirmada y nuestra cocina ha comenzado a prepararla.";
+        }
+        // 2. SENT (preparing -> out_for_delivery) - Only for Delivery
+        else if (oldStatus === 'preparing' && newStatus === 'out_for_delivery' && deliveryMethod === 'delivery') {
+            message = "🚀 *EN CAMINO:* Su pedido ha salido del restaurante y va rumbo a su domicilio. ¡Le sugerimos estar atento!";
+        }
+        // 3. DELIVERED (out_for_delivery -> completed) - Only for Delivery
+        else if (oldStatus === 'out_for_delivery' && newStatus === 'completed' && deliveryMethod === 'delivery') {
+            message = "✅ *ENTREGADO:* Su pedido ha llegado. Esperamos que disfrute su experiencia culinaria.";
+        }
+        // 4. PICKUP READY/DONE (preparing -> completed) - Only for Pickup
+        else if (oldStatus === 'preparing' && newStatus === 'completed' && deliveryMethod === 'pickup') {
+            message = "🛍️ *LISTO PARA RECOGER:* Su pedido está listo en sucursal. ¡Lo esperamos!";
+        }
 
-        if (!isNewCashOrder && !isPaymentConfirmed) {
-            console.log("ℹ️ Status change not relevant for notification.");
-            return new Response("Skipped: Irrelevant Status Change", { status: 200 });
+        if (!message) {
+            console.log(`ℹ️ Status change ${oldStatus}->${newStatus} not relevant for notification.`);
+            return new Response("Skipped: Irrelevant Status change", { status: 200 });
         }
 
         const customerName = order.customer_name;
         const orderId = order.id;
-        const total = order.total;
-
-        // 3. Smart Message Content
-        let typeMessage = "🍳 Cocinando";
-        if (order.delivery_method === 'pickup') {
-            typeMessage = "🛍️ Para Recoger en Tienda";
-        } else {
-            // Shorten address to keep it clean
-            const shortAddr = (order.customer_address || '').split(',')[0].slice(0, 25);
-            typeMessage = `🛵 Envío a: ${shortAddr}...`;
-        }
 
         // Format Phone: Remove non-digits, ensure MX prefix
-        let phone = (order.customer_phone || '').replace(/\D/g, '');
+        let phone = (order.customer_phone || '').replace(/\D/g, ''); // Using 'customer_phone' field? Previous code used order.phone or order.customer_phone?
+        // Checking previous file, it used 'order.customer_phone' OR 'order.phone' wasn't clear, let's assume 'phone' based on insert logic in index.ts
+        // In index.ts insert: phone: context.from
+        if (!phone && order.phone) phone = order.phone.replace(/\D/g, '');
+
+        // If from whatsapp it might have 52...
+        // Ensure it has 52 if 10 digits
         if (phone.length === 10) phone = '52' + phone;
 
-        console.log(`Sending WhatsApp to Customer (${phone}) for Order #${orderId}`);
+        console.log(`Sending WhatsApp to Customer (${phone}) for Order #${orderId} - Status: ${newStatus}`);
 
         if (phone.length < 10) {
             console.error("Invalid phone number, skipping WhatsApp");
@@ -77,10 +84,10 @@ serve(async (req) => {
                 },
                 body: JSON.stringify({
                     messaging_product: "whatsapp",
-                    to: phone, // Send to Customer
+                    to: phone,
                     type: "template",
                     template: {
-                        name: "actualizacion_pedido",
+                        name: "actualizacion_pedido1",
                         language: { code: "es_MX" },
                         components: [
                             {
@@ -88,8 +95,7 @@ serve(async (req) => {
                                 parameters: [
                                     { type: "text", text: String(orderId) }, // {{1}}
                                     { type: "text", text: "Yoko Poke House" }, // {{2}}
-                                    // {{3}} - Clean text without newlines
-                                    { type: "text", text: `CONFIRMADO ($${total}) - ${typeMessage} - Cliente: ${customerName}` }
+                                    { type: "text", text: message } // {{3}}
                                 ],
                             },
                         ],

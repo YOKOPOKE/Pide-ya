@@ -68,10 +68,12 @@ export default function OrderFlow() {
 
     console.log('OrderFlow Render:', { showBuilder, builderMode });
 
-    // Map builderMode to slug
+    // Map builderMode to slug (Direct pass-through for dynamic slugs)
     const getProductSlug = (mode: string): string => {
-        if (mode === 'burger' || mode === 'sushi-burger') return 'sushi-burger';
-        return 'poke-mediano'; // Default to poke
+        // Legacy handling if needed, but primarily trust the passed slug
+        if (mode === 'bowl') return 'poke-mediano'; // Fallback for legacy events
+        if (mode === 'burger') return 'sushi-burger'; // Fallback for legacy events
+        return mode;
     };
 
     return (

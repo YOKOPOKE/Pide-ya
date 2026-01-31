@@ -60,7 +60,7 @@ export default function BuilderPage() {
     // Initial Load
     useEffect(() => {
         const loadInitial = async () => {
-            const { data: prods } = await supabase.from('products').select('id, name, slug, category_id').eq('is_active', true).order('name');
+            const { data: prods } = await supabase.from('products').select('id, name, slug, category_id').order('name');
             if (prods) setProducts(prods);
 
             const { data: ings } = await supabase.from('ingredients').select('id, name, premium_price').order('name');

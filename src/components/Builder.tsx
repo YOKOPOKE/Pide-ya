@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Check, ShoppingBag, AlertCircle, X } from 'lucide-react';
 import Image from 'next/image';
 import { useCart } from '@/context/CartContext';
+import { useToast } from '@/context/ToastContext';
 import { createClient } from '@/lib/supabase';
 import { BuilderSkeleton } from './ui/BuilderSkeleton';
 
@@ -68,6 +69,7 @@ type SelectionState = {
 export default function Builder({ initialProductSlug = 'poke-mediano', onBack }: { initialProductSlug?: string; onBack?: () => void }) {
     const supabase = createClient();
     const { addToCart } = useCart();
+    const { showToast } = useToast();
 
     // Data State
     const [product, setProduct] = useState<Product | null>(null);
@@ -96,6 +98,8 @@ export default function Builder({ initialProductSlug = 'poke-mediano', onBack }:
         const fetchProductTree = async () => {
             setLoading(true);
             try {
+                console.log('🏁 Builder starting fetch for slug:', initialProductSlug);
+
                 // 1. Fetch Product
                 const { data: prodData, error: prodError } = await supabase
                     .from('products')
@@ -103,7 +107,7 @@ export default function Builder({ initialProductSlug = 'poke-mediano', onBack }:
                     .eq('slug', initialProductSlug)
                     .single();
 
-                if (prodError || !prodData) throw new Error('Producto no encontrado');
+                if (prodError || !prodData) throw new Error(`Producto no encontrado (${initialProductSlug})`);
 
                 console.log('🔍 Builder loaded product:', prodData.name, 'ID:', prodData.id, 'Slug:', prodData.slug);
 
@@ -128,7 +132,7 @@ export default function Builder({ initialProductSlug = 'poke-mediano', onBack }:
                         .from('step_options')
                         .select('*')
                         .in('step_id', stepIds)
-                        .eq('is_available', true)
+                        // .eq('is_available', true) // Fetch ALL to handle disabled
                         .order('name', { ascending: true });
                     if (error) throw error;
                     optionsData = data;
@@ -171,6 +175,25 @@ export default function Builder({ initialProductSlug = 'poke-mediano', onBack }:
         if (initialProductSlug) {
             fetchProductTree();
         }
+
+        const channel = supabase.channel('builder-updates')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+                console.log('🔄 Builder: Product update detected');
+                fetchProductTree();
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'product_steps' }, () => {
+                console.log('🔄 Builder: Steps update detected');
+                fetchProductTree();
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'step_options' }, () => {
+                console.log('🔄 Builder: Options update detected');
+                fetchProductTree();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, [initialProductSlug, supabase]);
 
     // Helpers
@@ -233,13 +256,16 @@ export default function Builder({ initialProductSlug = 'poke-mediano', onBack }:
             const included = Number(step.included_selections ?? 0);
 
             stepSels.forEach((sel, idx) => {
-                // Logic: The first 'included' selections are fully free (waive option price + step extra price).
+                // Logic: The "included" count only waives the STEP EXTRA price.
+                // Premium options (sel.price_extra) are ALWAYS charged.
                 const isFree = idx < included;
 
+                // 1. Always charge Option Premium
+                if (sel.price_extra) total += sel.price_extra;
+
+                // 2. Charge Step Extra if exceeding limit
                 if (!isFree) {
-                    // It's an extra. Charge Step Price + Option Premium
                     total += (step.price_per_extra || 0);
-                    if (sel.price_extra) total += sel.price_extra;
                 }
             });
         });
@@ -262,9 +288,12 @@ export default function Builder({ initialProductSlug = 'poke-mediano', onBack }:
                     const isFree = idx < included;
                     let extraCost = 0;
 
+                    // 1. Always charge Option Premium
+                    if (sel.price_extra) extraCost += Number(sel.price_extra);
+
+                    // 2. Charge Step Extra if exceeding limit
                     if (!isFree) {
                         extraCost += (Number(step.price_per_extra) || 0);
-                        if (sel.price_extra) extraCost += Number(sel.price_extra);
                     }
 
                     return extraCost > 0
@@ -360,6 +389,9 @@ export default function Builder({ initialProductSlug = 'poke-mediano', onBack }:
                                 <div className="inline-flex items-center gap-2 px-4 py-2 bg-white rounded-full border border-slate-200 shadow-sm text-sm font-bold text-slate-600">
                                     <AlertCircle size={16} className="text-violet-500" />
                                     Elige {currentStep.max_selections ? `hasta ${currentStep.max_selections}` : 'tus favoritos'}
+                                    <span className="ml-2 text-xs text-slate-400 border-l border-slate-200 pl-2">
+                                        (Incluye: {currentStep.included_selections ?? 0} | Extra: +${currentStep.price_per_extra})
+                                    </span>
                                 </div>
                             </div>
 
@@ -388,22 +420,22 @@ export default function Builder({ initialProductSlug = 'poke-mediano', onBack }:
 
                                     if (!isSelected) {
                                         // Will this be the (N+1)th item?
-                                        const predictionIndex = alreadySelectedCount; // 0-based, so if 0 selected, prediction is 0 (1st item)
+                                        const predictionIndex = alreadySelectedCount;
                                         const isFree = predictionIndex < includedCount;
 
+                                        if (opt.price_extra) displayPrice += opt.price_extra;
                                         if (!isFree) {
-                                            // It will cost Extra
                                             displayPrice += (currentStep.price_per_extra || 0);
-                                            if (opt.price_extra) displayPrice += opt.price_extra;
                                         }
                                     } else {
-                                        // If already selected, show what it IS costing? 
+                                        // If already selected, show what it IS costing
                                         const myIndex = currentSels.findIndex(s => s.id === opt.id);
+                                        // Note: If I unselect this, indices shift, but purely for "what is this costing me NOW":
                                         const isFree = myIndex !== -1 && myIndex < includedCount;
 
+                                        if (opt.price_extra) displayPrice += opt.price_extra;
                                         if (!isFree) {
                                             displayPrice += (currentStep.price_per_extra || 0);
-                                            if (opt.price_extra) displayPrice += opt.price_extra;
                                         }
                                     }
 
@@ -411,11 +443,11 @@ export default function Builder({ initialProductSlug = 'poke-mediano', onBack }:
                                         <motion.div
                                             key={opt.id}
                                             variants={itemVariants}
-                                            onClick={() => opt.is_available && handleToggleOption(opt)}
+                                            onClick={() => handleToggleOption(opt)}
                                             className={`
                                                 rounded-2xl p-4 border transition-all duration-200 group relative overflow-hidden transform-gpu
                                                 ${!opt.is_available
-                                                    ? 'opacity-50 cursor-not-allowed bg-slate-100 border-slate-200 grayscale'
+                                                    ? 'opacity-60 cursor-pointer bg-slate-50 border-slate-100 grayscale'
                                                     : 'cursor-pointer'
                                                 }
                                                 ${isSelected

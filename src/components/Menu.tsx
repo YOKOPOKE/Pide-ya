@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Star, Plus, Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { useCart } from "@/context/CartContext";
+import { useToast } from "@/context/ToastContext";
 import confetti from "canvas-confetti";
 
 
@@ -13,6 +14,7 @@ type Category = {
     id: number;
     name: string;
     slug: string;
+    is_active?: boolean;
 };
 
 type Product = {
@@ -66,6 +68,7 @@ export default function Menu() {
 
     const supabase = createClient();
     const { addToCart } = useCart();
+    const { showToast } = useToast();
 
 
     useEffect(() => {
@@ -75,20 +78,52 @@ export default function Menu() {
             // 1. Fetch Categories
             // We verify specific categories order or just alpha
             // Ideally we could have an 'order' column, but alpha or ID is fine for now
-            const { data: cats } = await supabase.from('categories').select('*').order('id');
+            // 1. Fetch Categories
+            // Show only active categories
+            const { data: cats } = await supabase
+                .from('categories')
+                .select('*')
+                .eq('is_active', true)
+                .order('id');
             if (cats) setDbCategories(cats);
 
             // 2. Fetch Products with Category relation
             const { data: prods } = await supabase
                 .from('products')
                 .select('*, categories(*)')
-                .eq('is_active', true);
+                // .eq('is_active', true) // Fetch ALL to show disabled
+                ;
 
             if (prods) setProducts(prods as any);
 
             setLoading(false);
         };
+
         fetchMenu();
+
+        // Realtime Subscription for Products and Categories
+        const channel = supabase.channel('menu-updates')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'products' },
+                () => {
+                    console.log('🔄 Product update detected. Refreshing menu...');
+                    fetchMenu();
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'categories' },
+                () => {
+                    console.log('🔄 Category update detected. Refreshing menu...');
+                    fetchMenu();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     // 1. Filter & Group
@@ -96,7 +131,7 @@ export default function Menu() {
         // Exclude Custom Builders (Bowls/Burgers) referenced by SLUG or Special Category
         // We assume 'pokes' and 'burgers' slugs in categories table are the builders
         const relevant = products.filter(p =>
-            p.type === 'other' // Only show 'standard' menu items, not the builder entry points if they are stored as products
+            p.type === 'other' || p.type === 'burger' // Show standard items and burgers in Menu
         );
 
         const grouped: Record<string, Product[]> = {};
@@ -142,6 +177,10 @@ export default function Menu() {
 
 
     const handleAdd = (product: Product) => {
+        if (!product.is_active) {
+            showToast('🚫 Producto no disponible por el momento.', 'error');
+            return;
+        }
         const price = Number(product.base_price || 0);
 
         addToCart({
@@ -291,7 +330,10 @@ export default function Menu() {
                                 initial="hidden"
                                 animate="show"
                                 exit="hidden"
-                                className="bg-white rounded-xl p-2 shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-100 group flex flex-col will-change-transform transform-gpu"
+                                className={`
+                                    rounded-xl p-2 shadow-sm transition-all duration-300 border border-slate-100 group flex flex-col will-change-transform transform-gpu
+                                    ${!product.is_active ? 'opacity-60 grayscale bg-slate-50 cursor-pointer' : 'bg-white hover:shadow-xl'}
+                                `}
                             >
                                 {/* Card Content */}
                                 <div className="relative aspect-square mb-2 overflow-hidden rounded-lg bg-slate-100">
@@ -334,7 +376,9 @@ export default function Menu() {
                                                 w-full py-1.5 rounded-lg font-bold text-[10px] transition-all flex items-center justify-center gap-1 relative overflow-hidden transform-gpu
                                                 ${justAdded[product.id]
                                                     ? 'bg-green-100 text-green-700'
-                                                    : 'bg-slate-50 text-slate-600 hover:bg-slate-900 hover:text-white hover:shadow-lg hover:shadow-slate-900/20 hover:-translate-y-0.5 active:translate-y-0'}
+                                                    : !product.is_active
+                                                        ? 'bg-slate-200 text-slate-400 cursor-pointer'
+                                                        : 'bg-slate-50 text-slate-600 hover:bg-slate-900 hover:text-white hover:shadow-lg hover:shadow-slate-900/20 hover:-translate-y-0.5 active:translate-y-0'}
                                             `}
                                         >
                                             {justAdded[product.id] ? (

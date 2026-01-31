@@ -18,7 +18,7 @@ type Order = {
     created_at: string;
     customer_name: string;
     total: number;
-    status: 'pending' | 'preparing' | 'completed' | 'cancelled' | 'awaiting_payment';
+    status: 'pending' | 'preparing' | 'completed' | 'cancelled' | 'awaiting_payment' | 'out_for_delivery';
     payment_status?: string;
     payment_method?: string;
     delivery_method: 'delivery' | 'pickup';
@@ -50,7 +50,7 @@ const useElapsedMinutes = (dateString: string) => {
 export default function AdminOrdersPage() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'pending' | 'preparing' | 'completed'>('pending');
+    const [activeTab, setActiveTab] = useState<'pending' | 'preparing' | 'out_for_delivery' | 'completed'>('pending');
     const { showToast } = useToast();
 
     // Supabase
@@ -106,7 +106,13 @@ export default function AdminOrdersPage() {
         try {
             const { error } = await supabase.from('orders').update({ status }).eq('id', id);
             if (error) throw error;
-            showToast(status === 'preparing' ? '🔥 A cocinar...' : '✅ Pedido completado', 'success');
+
+            let message = 'Estado actualizado';
+            if (status === 'preparing') message = '🔥 A cocinar...';
+            if (status === 'out_for_delivery') message = '🛵 Pedido en camino';
+            if (status === 'completed') message = '✅ Pedido completado';
+
+            showToast(message, 'success');
         } catch (e) {
             console.error(e);
             showToast('Error al actualizar status', 'error');
@@ -118,6 +124,7 @@ export default function AdminOrdersPage() {
     const pendingCount = orders.filter(o => o.status === 'pending').length;
     const preparingCount = orders.filter(o => o.status === 'preparing').length;
     const completedCount = orders.filter(o => o.status === 'completed').length;
+    const outForDeliveryCount = orders.filter(o => o.status === 'out_for_delivery').length;
 
     // Revenue logic (Today)
     const now = new Date();
@@ -128,6 +135,7 @@ export default function AdminOrdersPage() {
     const tabs = [
         { id: 'pending', label: 'Por Aceptar', count: pendingCount, icon: <Flame size={18} /> },
         { id: 'preparing', label: 'Cocinando', count: preparingCount, icon: <ChefHat size={18} /> },
+        { id: 'out_for_delivery', label: 'En Ruta', count: outForDeliveryCount, icon: <MapPin size={18} /> },
         { id: 'completed', label: 'Entregados', count: completedCount, icon: <CheckCircle size={18} /> },
     ];
 
@@ -270,18 +278,23 @@ export default function AdminOrdersPage() {
     );
 }
 
-// --- NEW COMPONENT: KITCHEN TICKET CARD ---
-// Clean, "Davur" style, Yoko Branding
+// --- NEW COMPONENT: PREMIUM KITCHEN TICKET CARD ---
 const KitchenTicketCard = ({ order, updateStatus }: { order: Order, updateStatus: any }) => {
     const elapsed = useElapsedMinutes(order.created_at);
 
     // Status Logic
     const isPending = order.status === 'pending';
     const isPreparing = order.status === 'preparing';
+    const isOutForDelivery = order.status === 'out_for_delivery';
+
+    // Timer Traffic Light
+    let timerColor = 'bg-emerald-50 text-emerald-600 border-emerald-100';
+    if (elapsed > 10) timerColor = 'bg-amber-50 text-amber-600 border-amber-100';
+    if (elapsed > 20) timerColor = 'bg-rose-50 text-rose-600 border-rose-100 animate-pulse font-bold';
 
     // Branding Colors
-    // Pending = Rose/Orange, Preparing = Blue, Completed = Green/Slate
-    const borderColor = isPending ? 'bg-rose-500' : isPreparing ? 'bg-blue-500' : 'bg-green-500';
+    const borderColor = isPending ? 'bg-rose-500' : isPreparing ? 'bg-blue-500' : isOutForDelivery ? 'bg-amber-500' : 'bg-green-500';
+    const statusLabel = isPending ? 'PENDIENTE' : isPreparing ? 'COCINANDO' : isOutForDelivery ? 'EN RUTA' : 'LISTO';
 
     return (
         <motion.div
@@ -289,86 +302,166 @@ const KitchenTicketCard = ({ order, updateStatus }: { order: Order, updateStatus
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
-            className="group relative bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col h-full"
+            className="group relative bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col h-full"
         >
-            {/* Left Status Stripe */}
-            <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${borderColor}`} />
+            {/* Top Status Border */}
+            <div className={`h-1.5 w-full ${borderColor}`} />
 
-            {/* Header */}
-            <div className="p-5 pb-3 border-b border-slate-50 flex justify-between items-start pl-6">
+            {/* Header Section */}
+            <div className="p-4 pb-3 border-b border-slate-100 bg-slate-50/50 flex justify-between items-start">
                 <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Orden</span>
-                    <h3 className="text-2xl font-black text-slate-900 leading-none">#{order.id}</h3>
-                    <p className="text-sm font-bold text-slate-600 mt-1 truncate max-w-[150px]">{order.customer_name}</p>
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${borderColor.replace('bg-', 'text-').replace('500', '600')} bg-white border border-current shadow-sm`}>
+                            {statusLabel}
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">#{order.id}</span>
+                    </div>
+                    <h3 className="text-xl font-black text-slate-900 leading-tight truncate w-full" title={order.customer_name}>
+                        {order.customer_name}
+                    </h3>
                 </div>
-                <div className={`px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 border ${elapsed > 10 ? 'bg-rose-50 text-rose-500 border-rose-100 animate-pulse' : 'bg-slate-50 text-slate-500 border-slate-100'}`}>
-                    <Timer size={12} />
+
+                {/* Timer Badge */}
+                <div className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border ${timerColor} shadow-sm`}>
+                    <Timer size={14} />
                     <span>{elapsed}m</span>
                 </div>
             </div>
 
-            {/* Info Row */}
-            <div className="px-6 py-2 flex items-center gap-3 text-xs font-medium text-slate-400 border-b border-slate-50 bg-slate-50/30">
-                {order.delivery_method === 'pickup' ? (
-                    <span className="flex items-center gap-1.5"><ShoppingBag size={12} className="text-orange-400" /> Pickup</span>
-                ) : (
-                    <span className="flex items-center gap-1.5"><MapPin size={12} className="text-indigo-400" /> Delivery</span>
+            {/* Meta Info Row */}
+            <div className="px-5 py-2.5 flex items-center justify-between text-xs font-semibold text-slate-500 border-b border-slate-100 bg-white">
+                <div className="flex items-center gap-3">
+                    {order.delivery_method === 'pickup' ? (
+                        <span className="flex items-center gap-1.5 text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100">
+                            <ShoppingBag size={12} /> Pickup
+                        </span>
+                    ) : (
+                        <span className="flex items-center gap-1.5 text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                            <MapPin size={12} /> Delivery
+                        </span>
+                    )}
+                    <span className="text-slate-300">|</span>
+                    <span>{new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase()}</span>
+                </div>
+                {order.payment_status === 'paid' && (
+                    <span className="text-emerald-600 flex items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+                        <CheckCircle size={10} /> Pagado
+                    </span>
                 )}
-                <span>•</span>
-                <span>{new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                {order.payment_status === 'paid' && <span className="text-green-500 flex items-center gap-1"><CheckCircle size={10} /> Pagado</span>}
             </div>
 
-            {/* Items List (Scrollable if too long) */}
-            <div className="p-6 pt-4 flex-1 space-y-4">
+            {/* Items List (Kitchen Ticket Style) */}
+            <div className="flex-1 overflow-y-auto max-h-[400px]">
                 {order.items.map((item: any, i) => (
-                    <div key={i} className="flex gap-3">
-                        <div className="flex-shrink-0 w-6 h-6 rounded bg-slate-100 flex items-center justify-center text-xs font-black text-slate-600">
+                    <div key={i} className={`p-4 flex gap-3 border-b border-slate-50 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                        {/* Qty Box */}
+                        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center text-sm font-black shadow-md shadow-slate-200">
                             1
                         </div>
-                        <div className="flex-1 text-sm">
-                            <p className="font-bold text-slate-800 leading-tight">{item.name || (item.productType === 'bowl' ? 'Poke Bowl' : 'Sushi Burger')}</p>
 
-                            {/* Detailed Ingredients */}
-                            <div className="flex flex-wrap gap-x-2 gap-y-1 mt-1.5">
-                                {item.base && <span className="text-[10px] text-slate-500 bg-slate-50 px-1.5 rounded border border-slate-100">Base: {item.base.name}</span>}
-                                {item.proteins?.map((p: any, idx: number) => (
-                                    <span key={idx} className="text-[10px] text-rose-600 bg-rose-50 px-1.5 rounded border border-rose-100">{p.name}</span>
-                                ))}
-                                {item.sauce && <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 rounded border border-amber-100">Salsa: {item.sauce.name}</span>}
+                        {/* Item Details */}
+                        <div className="flex-1">
+                            <p className="font-extrabold text-slate-800 text-base leading-tight">
+                                {item.name || (item.productType === 'bowl' ? 'Poke Bowl' : 'Sushi Burger')}
+                            </p>
+
+                            {/* Modifiers Grid */}
+                            <div className="flex flex-col gap-1 mt-2">
+                                {item.base && (
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] uppercase font-bold text-slate-400 w-10 text-right">Base</span>
+                                        <span className="text-xs font-semibold text-slate-700 bg-white border border-slate-200 px-2 py-0.5 rounded-md shadow-sm">
+                                            {item.base.name}
+                                        </span>
+                                    </div>
+                                )}
+                                {item.proteins && item.proteins.length > 0 && (
+                                    <div className="flex items-start gap-2">
+                                        <span className="text-[10px] uppercase font-bold text-rose-400 w-10 text-right mt-0.5">Prot</span>
+                                        <div className="flex flex-wrap gap-1">
+                                            {item.proteins.map((p: any, idx: number) => (
+                                                <span key={idx} className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-md">
+                                                    {p.name}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {item.sauce && (
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] uppercase font-bold text-amber-400 w-10 text-right">Salsa</span>
+                                        <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-md">
+                                            {item.sauce.name}
+                                        </span>
+                                    </div>
+                                )}
+                                {item.extras && item.extras.length > 0 && (
+                                    <div className="flex items-start gap-2 mt-1 pt-1 border-t border-dashed border-slate-200">
+                                        <span className="text-[10px] uppercase font-bold text-blue-400 w-10 text-right mt-0.5">Extra</span>
+                                        <div className="flex flex-wrap gap-1">
+                                            {item.extras.map((e: any, idx: number) => (
+                                                <span key={idx} className="text-[11px] font-medium text-blue-600 bg-blue-50 px-1.5 py-0 rounded">
+                                                    + {e.name}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
                 ))}
             </div>
 
-            {/* Action Footer */}
-            {isPending && (
-                <div className="p-4 pt-0 mt-auto">
+            {/* Action Footer (Sticky Bottom) */}
+            <div className="p-4 bg-white border-t border-slate-100 mt-auto">
+                <div className="flex justify-between items-center text-xs font-bold text-slate-400 mb-3 px-1">
+                    <span>Total Orden</span>
+                    <span className="text-lg text-slate-900 font-black">${order.total}</span>
+                </div>
+
+                {isPending && (
                     <button
                         onClick={() => updateStatus(order.id, 'preparing')}
-                        className="w-full py-4 rounded-xl bg-gradient-to-r from-rose-500 to-orange-500 text-white font-bold text-sm shadow-xl shadow-rose-200 hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                        className="w-full h-12 rounded-xl bg-gradient-to-r from-rose-500 to-orange-600 text-white font-black text-sm shadow-lg shadow-rose-200 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                     >
-                        <Flame size={18} fill="currentColor" className="text-white/90" />
-                        COCINAR
+                        <Flame size={20} fill="currentColor" className="text-white/80 animate-pulse" />
+                        EMPEZAR A COCINAR
                     </button>
-                    <div className="text-center mt-3">
-                        <span className="text-xs font-bold text-slate-300">Total: ${order.total}</span>
-                    </div>
-                </div>
-            )}
+                )}
 
-            {isPreparing && (
-                <div className="p-4 pt-0 mt-auto">
+                {isPreparing && (
+                    <div className="flex gap-2">
+                        {order.delivery_method === 'delivery' ? (
+                            <button
+                                onClick={() => updateStatus(order.id, 'out_for_delivery')}
+                                className="w-full h-12 rounded-xl bg-gradient-to-r from-indigo-500 to-blue-600 text-white font-black text-sm shadow-lg shadow-indigo-200 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                            >
+                                <MapPin size={20} />
+                                ENVIAR A DOMICILIO
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => updateStatus(order.id, 'completed')}
+                                className="w-full h-12 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black text-sm shadow-lg shadow-emerald-200 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                            >
+                                <CheckCircle size={20} />
+                                MARCAR LISTO
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                {isOutForDelivery && (
                     <button
                         onClick={() => updateStatus(order.id, 'completed')}
-                        className="w-full py-4 rounded-xl bg-slate-900 text-white font-bold text-sm shadow-xl shadow-slate-200 hover:shadow-2xl hover:bg-slate-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                        className="w-full h-12 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-black text-sm shadow-lg shadow-emerald-200 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                     >
-                        <CheckCircle size={18} />
-                        FINALIZAR
+                        <CheckCircle size={20} />
+                        CONFIRMAR ENTREGA
                     </button>
-                </div>
-            )}
+                )}
+            </div>
         </motion.div>
     );
 };

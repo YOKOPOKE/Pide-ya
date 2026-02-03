@@ -352,65 +352,68 @@ const KitchenTicketCard = ({ order, updateStatus }: { order: Order, updateStatus
 
             {/* Items List (Kitchen Ticket Style) */}
             <div className="flex-1 overflow-y-auto max-h-[400px]">
-                {(Array.isArray(order.items) ? order.items : [order.items]).map((item: any, i) => (
-                    <div key={i} className={`p-4 flex gap-3 border-b border-slate-50 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
-                        {/* Qty Box */}
-                        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center text-sm font-black shadow-md shadow-slate-200">
-                            1
-                        </div>
+                {(Array.isArray(order.items) ? order.items : (order.items ? [order.items] : [])).map((item: any, i) => {
+                    if (!item) return null; // Skip empty/null items to avoid crash
+                    return (
+                        <div key={i} className={`p-4 flex gap-3 border-b border-slate-50 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                            {/* Qty Box */}
+                            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center text-sm font-black shadow-md shadow-slate-200">
+                                1
+                            </div>
 
-                        {/* Item Details */}
-                        <div className="flex-1">
-                            <p className="font-extrabold text-slate-800 text-base leading-tight">
-                                {item.name || (item.productType === 'bowl' ? 'Poke Bowl' : 'Sushi Burger')}
-                            </p>
+                            {/* Item Details */}
+                            <div className="flex-1">
+                                <p className="font-extrabold text-slate-800 text-base leading-tight">
+                                    {item.name || (item.productType === 'bowl' ? 'Poke Bowl' : 'Sushi Burger')}
+                                </p>
 
-                            {/* Modifiers Grid */}
-                            <div className="flex flex-col gap-1 mt-2">
-                                {item.base && (
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[10px] uppercase font-bold text-slate-400 w-10 text-right">Base</span>
-                                        <span className="text-xs font-semibold text-slate-700 bg-white border border-slate-200 px-2 py-0.5 rounded-md shadow-sm">
-                                            {item.base.name}
-                                        </span>
-                                    </div>
-                                )}
-                                {item.proteins && item.proteins.length > 0 && (
-                                    <div className="flex items-start gap-2">
-                                        <span className="text-[10px] uppercase font-bold text-rose-400 w-10 text-right mt-0.5">Prot</span>
-                                        <div className="flex flex-wrap gap-1">
-                                            {item.proteins.map((p: any, idx: number) => (
-                                                <span key={idx} className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-md">
-                                                    {p.name}
-                                                </span>
-                                            ))}
+                                {/* Modifiers Grid */}
+                                <div className="flex flex-col gap-1 mt-2">
+                                    {item.base && (
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] uppercase font-bold text-slate-400 w-10 text-right">Base</span>
+                                            <span className="text-xs font-semibold text-slate-700 bg-white border border-slate-200 px-2 py-0.5 rounded-md shadow-sm">
+                                                {item.base.name}
+                                            </span>
                                         </div>
-                                    </div>
-                                )}
-                                {item.sauce && (
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[10px] uppercase font-bold text-amber-400 w-10 text-right">Salsa</span>
-                                        <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-md">
-                                            {item.sauce.name}
-                                        </span>
-                                    </div>
-                                )}
-                                {item.extras && item.extras.length > 0 && (
-                                    <div className="flex items-start gap-2 mt-1 pt-1 border-t border-dashed border-slate-200">
-                                        <span className="text-[10px] uppercase font-bold text-blue-400 w-10 text-right mt-0.5">Extra</span>
-                                        <div className="flex flex-wrap gap-1">
-                                            {item.extras.map((e: any, idx: number) => (
-                                                <span key={idx} className="text-[11px] font-medium text-blue-600 bg-blue-50 px-1.5 py-0 rounded">
-                                                    + {e.name}
-                                                </span>
-                                            ))}
+                                    )}
+                                    {item.proteins && item.proteins.length > 0 && (
+                                        <div className="flex items-start gap-2">
+                                            <span className="text-[10px] uppercase font-bold text-rose-400 w-10 text-right mt-0.5">Prot</span>
+                                            <div className="flex flex-wrap gap-1">
+                                                {item.proteins.map((p: any, idx: number) => (
+                                                    <span key={idx} className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-md">
+                                                        {p.name}
+                                                    </span>
+                                                ))}
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
+                                    )}
+                                    {item.sauce && (
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] uppercase font-bold text-amber-400 w-10 text-right">Salsa</span>
+                                            <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-md">
+                                                {item.sauce.name}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {item.extras && item.extras.length > 0 && (
+                                        <div className="flex items-start gap-2 mt-1 pt-1 border-t border-dashed border-slate-200">
+                                            <span className="text-[10px] uppercase font-bold text-blue-400 w-10 text-right mt-0.5">Extra</span>
+                                            <div className="flex flex-wrap gap-1">
+                                                {item.extras.map((e: any, idx: number) => (
+                                                    <span key={idx} className="text-[11px] font-medium text-blue-600 bg-blue-50 px-1.5 py-0 rounded">
+                                                        + {e.name}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
 
             {/* Action Footer (Sticky Bottom) */}

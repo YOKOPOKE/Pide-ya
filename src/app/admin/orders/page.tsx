@@ -147,7 +147,7 @@ export default function AdminOrdersPage() {
                 {/* Header Row */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl font-black text-slate-900 tracking-tight">Panel de Control</h1>
+                        <h1 className="text-2xl font-black text-slate-900 tracking-tight">Panel de Control (Fix Applied)</h1>
                         <p className="text-sm text-slate-400 font-medium">Bienvenido de nuevo, Chef.</p>
                     </div>
 

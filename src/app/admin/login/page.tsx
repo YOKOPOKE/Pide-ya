@@ -37,9 +37,10 @@ export default function AdminLogin() {
 
                 if (session.data.session) {
                     setError('Login exitoso. Redirigiendo...');
+                    // Force full reload to ensure session is recognized
                     setTimeout(() => {
-                        router.push('/admin/menu');
-                    }, 1000);
+                        window.location.href = '/admin/menu';
+                    }, 500);
                 } else {
                     setError('Error: La sesión no se persistió.');
                 }

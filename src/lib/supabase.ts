@@ -1,5 +1,5 @@
 
-import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key';
@@ -9,19 +9,6 @@ if (process.env.NODE_ENV !== 'production' && (!process.env.NEXT_PUBLIC_SUPABASE_
     console.warn('⚠️ Supabase environment variables not set. Using placeholders for build.');
 }
 
-export const supabase = createSupabaseClient(supabaseUrl, supabaseKey, {
-    auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-    },
-    global: {
-        // Force fetch to not cache requests to ensure fresh data
-        fetch: (url, options) => {
-            return fetch(url, { ...options, cache: 'no-store' });
-        }
-    }
-});
+export const supabase = createBrowserClient(supabaseUrl, supabaseKey);
 
 export const createClient = () => supabase;
-
-// console.log('Supabase Client Initialized with URL:', supabaseUrl);

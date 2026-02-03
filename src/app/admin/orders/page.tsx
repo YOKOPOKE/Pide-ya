@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { createClient } from '@/lib/supabase-browser';
+import { supabase } from '@/lib/supabase';
 import {
     CheckCircle, RefreshCw, User, ShoppingBag, MapPin,
     ChefHat, Flame, Timer, BarChart3, ChevronDown,
@@ -54,7 +54,7 @@ export default function AdminOrdersPage() {
     const { showToast } = useToast();
 
     // Supabase
-    const supabase = createClient();
+    // const supabase = createClient();
 
     const fetchOrders = async () => {
         setLoading(true);

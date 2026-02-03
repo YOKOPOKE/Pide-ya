@@ -214,6 +214,23 @@ async function handleBuilderFlow(context: MessageContext, session: SessionData, 
     // --- DETERMINE NEXT STEP OR STAY ---
     if (!shouldAdvance) {
         //STAY ON STEP
+
+        // FIX: If we have selections in multi-select and user didn't explicitly ask for list,
+        // show BUTTONS ONLY to avoid loop confusion and redundant messages.
+        if (currentStep.max_selections > 1 && currentSelections.length > 0 && !wantsToAddMore) {
+            const selectedLabels = currentStep.options
+                .filter(o => currentSelections.includes(o.id))
+                .map(o => o.name).join(', ');
+
+            await sendButtonMessage(context.from, {
+                body: `${selectedLabels.length > 0 ? `✅ Llevas: ${selectedLabels}.\n` : ''}${currentSelections.length} seleccionado(s).\n¿Qué quieres hacer?`,
+                buttons: [
+                    { id: 'agregar_mas', title: '➕ Agregar más' },
+                    { id: 'listo', title: '✅ Listo' }
+                ]
+            });
+            return { text: "" };
+        }
         const selectedNames = currentStep.options
             .filter(o => currentSelections.includes(o.id))
             .map(o => o.name);

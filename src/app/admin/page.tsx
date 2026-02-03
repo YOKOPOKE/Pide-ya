@@ -2,14 +2,20 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase-browser';
 import { ChefHat, ShoppingBag, Settings, Coffee, TrendingUp, Activity, Clock, Calendar, ArrowRight, BarChart3 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
-export default function AdminHub() {
-    const supabase = createClient();
+export default function AdminDashboard() {
+    const router = useRouter();
+
+    useEffect(() => {
+        router.push('/admin/orders');
+    }, [router]);
+
     const [stats, setStats] = useState({ revenue: 0, pending: 0, completed: 0 });
     const [loading, setLoading] = useState(true);
     const [greeting, setGreeting] = useState('Hola');

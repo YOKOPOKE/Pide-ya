@@ -7,7 +7,7 @@ import {
     Layers, Package, CheckCircle2, XCircle, DollarSign, Image as ImageIcon,
     ChefHat, Coffee, Search, MoreHorizontal, Settings
 } from 'lucide-react';
-import { createClient } from '@/lib/supabase-browser';
+import { supabase } from '@/lib/supabase';
 import { ImageUpload } from '@/components/ui/ImageUpload';
 import { useToast } from '@/context/ToastContext';
 import ConfirmModal from '@/components/admin/ConfirmModal';
@@ -55,7 +55,7 @@ type Option = {
 };
 
 export default function AdminMenuPage() {
-    const supabase = createClient();
+    // const supabase = createClient();
     const { showToast } = useToast();
 
     // --- State ---

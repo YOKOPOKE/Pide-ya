@@ -117,26 +117,133 @@ export async function handleCheckoutFlow(
         }
     }
 
+    // Helper to get Mexico City time
+    function getMexicoCityTime() {
+        return new Date(new Date().toLocaleString("en-US", { timeZone: "America/Mexico_City" }));
+    }
+
+    function generateTimeSlots(startOffsetMinutes = 20, limit = 6, interval = 20): string[] {
+        const mxDate = getMexicoCityTime();
+
+        // Start offset mins from now (Prep time)
+        mxDate.setMinutes(mxDate.getMinutes() + startOffsetMinutes);
+
+        // Round up to next interval
+        const remainder = mxDate.getMinutes() % interval;
+        if (remainder !== 0) {
+            mxDate.setMinutes(mxDate.getMinutes() + (interval - remainder));
+        }
+        mxDate.setSeconds(0);
+        mxDate.setMilliseconds(0);
+
+        const slots: string[] = [];
+
+        // Limit to end of day (e.g. 10 PM)
+        const endOfDay = getMexicoCityTime();
+        endOfDay.setHours(22, 0, 0, 0); // Close at 10 PM
+
+        for (let i = 0; i < limit; i++) {
+            if (mxDate > endOfDay) break;
+
+            // Format: HH:MM AM/PM
+            const timeStr = mxDate.toLocaleTimeString("es-MX", { hour: '2-digit', minute: '2-digit', hour12: true });
+            slots.push(timeStr);
+            mxDate.setMinutes(mxDate.getMinutes() + interval);
+        }
+        return slots;
+    }
+
+    // ... inside processCheckoutStep ...
+
     // Step 2.5: COLLECT_PICKUP_TIME
+    // Handling INITIAL Request
+    if (checkout.deliveryMethod === 'pickup' && checkout.checkoutStep === 'COLLECT_PICKUP_TIME' && !text) {
+        // This block handles the "entry" into this state if called recursively, 
+        // but usually we set state and return immediately in previous step.
+        // We'll rely on the "previous step" logic to render this.
+        // WAITING FOR INPUT...
+    }
+
     if (checkout.checkoutStep === 'COLLECT_PICKUP_TIME') {
-        // Validate time selection
-        // Accept any text basically, but prioritize button clicks
-        // Clean text to match slot format if possible, or just accept whatever they typed
+        const lowerText = text.toLowerCase().trim();
+        const cleanId = text.replace('time_', ''); // Handle list ID if prefix used
 
-        let selectedTime = text.replace(/[🕒✅]/g, '').trim();
+        // Handle "Ver más horarios"
+        if (cleanId === 'show_more_times' || lowerText.includes('ver más') || lowerText.includes('mas tarde')) {
+            const slots = generateTimeSlots(140, 10, 30); // Start 2h 20m from now, 30 min intervals
 
-        // Basic validation: length
-        if (selectedTime.length < 3) {
-            const slots = generateTimeSlots();
             return {
-                text: "⚠️ Por favor selecciona una hora válida:",
-                useButtons: true,
-                buttons: slots.slice(0, 3)
+                text: "📅 *Horarios Extendidos*\nSelecciona una hora para hoy:",
+                useList: true,
+                listData: {
+                    header: "Horarios Disponibles",
+                    body: "Elige la hora que prefieras:",
+                    footer: "Yoko Poke",
+                    buttonText: "Ver horarios",
+                    sections: [{
+                        title: "Tarde / Noche",
+                        rows: slots.map(s => ({
+                            id: `time_${s}`,
+                            title: s,
+                            description: "Recoger en tienda"
+                        }))
+                    }]
+                }
+            };
+        }
+
+        // Validate time selection
+        let selectedTime = text.replace(/[🕒✅]/g, '').trim();
+        if (selectedTime.startsWith('time_')) selectedTime = selectedTime.replace('time_', '');
+
+        // Basic validation: must look like time or be in list
+        // We accept it if logic flow got here
+
+        if (selectedTime.length < 3) {
+            // Re-render INITIAL view
+            const shortSlots = generateTimeSlots(20, 6, 20); // Next 2 hours, 20 min intervals
+
+            if (shortSlots.length === 0) {
+                return {
+                    text: "🌙 *¡Ya cerramos por hoy!* 🌙\n\nNuestras entregas son hasta las 10:00 PM.\nPor favor intenta de nuevo mañana. ☀️",
+                    useButtons: true,
+                    buttons: ['Menú Principal']
+                };
+            }
+
+            return {
+                text: `📍 *Recoger en Tienda*\n\n¿A qué hora pasas por tu pedido?`,
+                useList: true,
+                listData: {
+                    header: "Horario de Recogida",
+                    body: "Nuestra cocina demora ~20 mins.\nSelecciona una hora estimada:",
+                    footer: "Horario Comitán",
+                    buttonText: "Seleccionar hora",
+                    sections: [
+                        {
+                            title: "Lo antes posible",
+                            rows: shortSlots.map(s => ({
+                                id: `time_${s}`,
+                                title: s,
+                                description: "Sugerido"
+                            }))
+                        },
+                        {
+                            title: "Opciones",
+                            rows: [{
+                                id: "show_more_times",
+                                title: "📅 Más tarde",
+                                description: "Ver horarios posteriores"
+                            }]
+                        }
+                    ]
+                }
             };
         }
 
         checkout.pickupTime = selectedTime;
         checkout.checkoutStep = 'SHOW_SUMMARY';
+        // ... proceed to summary ...
 
         const product = await getProductWithSteps(checkout.productSlug);
         if (!product) return { text: "Error: Producto no encontrado." };

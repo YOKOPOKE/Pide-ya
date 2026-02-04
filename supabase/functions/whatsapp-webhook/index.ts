@@ -21,6 +21,43 @@ export interface BotResponse {
     text: string;
     useButtons?: boolean;
     buttons?: string[];
+    useList?: boolean;
+    listData?: ListMessage;
+}
+
+// ... lines 40-600 ...
+
+// --- 5. CHECKOUT FLOW ---
+if (session.mode === 'CHECKOUT' && session.checkoutState) {
+    const checkoutResponse = await checkoutService.processCheckoutStep(
+        session.checkoutState,
+        text,
+        from,
+        context.name
+    );
+
+    // Save state
+    await updateSession(from, session);
+
+    // Send response
+    if (checkoutResponse.useList && checkoutResponse.listData) {
+        const success = await sendListMessage(from, checkoutResponse.listData);
+        if (!success) {
+            // Fallback to text if list fails
+            await sendWhatsAppText(from, checkoutResponse.text);
+        }
+    } else if (checkoutResponse.useButtons && checkoutResponse.buttons) {
+        await sendButtonMessage(from, {
+            body: checkoutResponse.text,
+            buttons: checkoutResponse.buttons.map((b: string, i: number) => ({
+                id: `btn_${i}`,
+                title: b
+            }))
+        });
+    } else {
+        await sendWhatsAppText(from, checkoutResponse.text);
+    }
+    return;
 }
 
 // WhatsApp Interactive Message Types

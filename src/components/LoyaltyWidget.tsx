@@ -6,9 +6,13 @@ import { Star, Phone, X, Award, ChevronUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Init Supabase Client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+// Build-safe initialization
+const supabase = (supabaseUrl && supabaseKey)
+    ? createClient(supabaseUrl, supabaseKey)
+    : null;
 
 export default function LoyaltyWidget() {
     const [isOpen, setIsOpen] = useState(false);
@@ -40,6 +44,12 @@ export default function LoyaltyWidget() {
 
     const checkLoyalty = async () => {
         if (phone.length < 10) return;
+
+        if (!supabase) {
+            setError("Error de configuración (Keys missing)");
+            return;
+        }
+
         vibrate();
         setLoading(true);
         setError("");
